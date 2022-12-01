@@ -6,7 +6,7 @@ fn cmpDescending(context: void, a: usize, b: usize) bool {
 }
 
 pub fn run(allocator: *const std.mem.Allocator) !void {
-    std.debug.print("Day 1\n#####\n", .{});
+    utils.printHeader("Day 1");
 
     const contents = try utils.readInputFileToBuffer("day1.in", allocator);
     defer allocator.free(contents);
@@ -32,6 +32,6 @@ pub fn run(allocator: *const std.mem.Allocator) !void {
 
     std.sort.sort(usize, sorted, {}, cmpDescending);
 
-    std.debug.print("Most well-equipped elf has {d} calories\n", .{sorted[0]});
-    std.debug.print("Most well-equipped 3 elves have {d} calories\n", .{sorted[0] + sorted[1] + sorted[2]});
+    std.debug.print("Part 1: Most well-equipped elf has {d} calories\n", .{sorted[0]});
+    std.debug.print("Part 2: Most well-equipped 3 elves have {d} calories\n", .{sorted[0] + sorted[1] + sorted[2]});
 }

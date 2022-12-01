@@ -9,4 +9,3 @@ pub fn main() !void {
     }
     try day1.run(&allocator);
 }
-
