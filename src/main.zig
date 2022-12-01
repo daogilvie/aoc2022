@@ -1,6 +1,12 @@
+const std = @import("std");
 const day1 = @import("day1.zig");
 
 pub fn main() !void {
-    try day1.run();
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+    defer {
+        _ = gpa.deinit();
+    }
+    try day1.run(&allocator);
 }
 

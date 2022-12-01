@@ -1,21 +1,17 @@
 const std = @import("std");
+const utils = @import("utils.zig");
 
 fn cmpDescending(context: void, a: usize, b: usize) bool {
     return std.sort.desc(usize)(context, a, b);
 }
 
-pub fn run() !void {
+pub fn run(allocator: *const std.mem.Allocator) !void {
     std.debug.print("Day 1\n#####\n", .{});
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
-    defer {
-        _ = gpa.deinit();
-    }
 
-    const contents = try std.fs.cwd().readFileAlloc(allocator, "inputs/day1.in", 1000000);
+    const contents = try utils.readInputFileToBuffer("day1.in", allocator);
     defer allocator.free(contents);
 
-    var calorie_list = std.ArrayList(usize).init(allocator);
+    var calorie_list = std.ArrayList(usize).init(allocator.*);
     defer calorie_list.deinit();
 
     var elf_chunks = std.mem.split(u8, contents, "\n\n");
