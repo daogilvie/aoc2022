@@ -12,5 +12,5 @@ const header_slice = "###################################";
 
 pub fn printHeader(header: []const u8) void {
     const line = header_slice[0 .. header.len + 4];
-    std.debug.print("{s}\n# {s} #\n{s}\n", .{ line, header, line });
+    std.debug.print("\n{s}\n# {s} #\n{s}\n\n", .{ line, header, line });
 }
