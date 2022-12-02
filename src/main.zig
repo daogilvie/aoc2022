@@ -11,3 +11,7 @@ pub fn main() !void {
     try day1.run(&allocator);
     try day2.run(&allocator);
 }
+
+test {
+ std.testing.refAllDecls(@This());
+}
