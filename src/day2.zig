@@ -7,19 +7,13 @@ const OpposingMove = enum(u8) {
     C = 3,
 
     pub fn getElementThatBeatsThis(self: OpposingMove) OpposingMove {
-        return switch (self) {
-            OpposingMove.A => OpposingMove.B,
-            OpposingMove.B => OpposingMove.C,
-            OpposingMove.C => OpposingMove.A,
-        };
+        const ordinal = std.math.rem(u8, @enumToInt(self), 3) catch unreachable;
+        return @intToEnum(OpposingMove, ordinal + 1);
     }
 
     pub fn getElementThatLosesToThis(self: OpposingMove) OpposingMove {
-        return switch (self) {
-            OpposingMove.A => OpposingMove.C,
-            OpposingMove.B => OpposingMove.A,
-            OpposingMove.C => OpposingMove.B,
-        };
+        const ordinal = std.math.rem(u8, @enumToInt(self) + 1, 3) catch unreachable;
+        return @intToEnum(OpposingMove, ordinal + 1);
     }
 };
 
@@ -29,23 +23,23 @@ const winning_score: u8 = 6;
 const drawing_score: u8 = 3;
 const losing_score: u8 = 0;
 
-fn calculateScoreOne(opponent: OpposingMove, suggestion: GuideSuggestion) usize {
-    const their_ord = @enumToInt(opponent);
+fn calculateScoreOne(opponent_move: OpposingMove, suggestion: GuideSuggestion) usize {
+    const their_ord = @enumToInt(opponent_move);
     const my_ord = @enumToInt(suggestion);
     const from_draw: u8 = if (their_ord == my_ord) drawing_score else 0;
     const from_win: u8 = switch (suggestion) {
-        GuideSuggestion.X => if (opponent == OpposingMove.C) winning_score else 0,
-        GuideSuggestion.Y => if (opponent == OpposingMove.A) winning_score else 0,
-        GuideSuggestion.Z => if (opponent == OpposingMove.B) winning_score else 0,
+        GuideSuggestion.X => if (opponent_move == OpposingMove.C) winning_score else 0,
+        GuideSuggestion.Y => if (opponent_move == OpposingMove.A) winning_score else 0,
+        GuideSuggestion.Z => if (opponent_move == OpposingMove.B) winning_score else 0,
     };
     return from_draw + from_win + my_ord;
 }
 
-fn calculateScoreTwo(opponent: OpposingMove, suggestion: GuideSuggestion) usize {
+fn calculateScoreTwo(opponent_move: OpposingMove, suggestion: GuideSuggestion) usize {
     return switch (suggestion) {
-        GuideSuggestion.X => losing_score + @enumToInt(opponent.getElementThatLosesToThis()),
-        GuideSuggestion.Y => drawing_score + @enumToInt(opponent),
-        GuideSuggestion.Z => winning_score + @enumToInt(opponent.getElementThatBeatsThis()),
+        GuideSuggestion.X => losing_score + @enumToInt(opponent_move.getElementThatLosesToThis()),
+        GuideSuggestion.Y => drawing_score + @enumToInt(opponent_move),
+        GuideSuggestion.Z => winning_score + @enumToInt(opponent_move.getElementThatBeatsThis()),
     };
 }
 
