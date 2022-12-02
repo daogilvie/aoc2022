@@ -6,7 +6,7 @@ const OpposingMove = enum(u8) {
     B = 2,
     C = 3,
 
-    pub fn winningElement(self: OpposingMove) OpposingMove {
+    pub fn getElementThatBeatsThis(self: OpposingMove) OpposingMove {
         return switch (self) {
             OpposingMove.A => OpposingMove.B,
             OpposingMove.B => OpposingMove.C,
@@ -14,7 +14,7 @@ const OpposingMove = enum(u8) {
         };
     }
 
-    pub fn losingElement(self: OpposingMove) OpposingMove {
+    pub fn getElementThatLosesToThis(self: OpposingMove) OpposingMove {
         return switch (self) {
             OpposingMove.A => OpposingMove.C,
             OpposingMove.B => OpposingMove.A,
@@ -43,9 +43,9 @@ fn calculateScoreOne(opponent: OpposingMove, me: MyMove) usize {
 
 fn calculateScoreTwo(opponent: OpposingMove, me: MyMove) usize {
     return switch (me) {
-        MyMove.X => losing_score + @enumToInt(opponent.losingElement()),
+        MyMove.X => losing_score + @enumToInt(opponent.getElementThatLosesToThis()),
         MyMove.Y => drawing_score + @enumToInt(opponent),
-        MyMove.Z => winning_score + @enumToInt(opponent.winningElement()),
+        MyMove.Z => winning_score + @enumToInt(opponent.getElementThatBeatsThis()),
     };
 }
 
@@ -60,8 +60,7 @@ pub fn run(allocator: *const std.mem.Allocator) !void {
 
     while (entries.next()) |opponent| {
         const op_move = std.meta.stringToEnum(OpposingMove, opponent).?;
-        const me = entries.next().?;
-        const my_move = std.meta.stringToEnum(MyMove, me).?;
+        const my_move = std.meta.stringToEnum(MyMove, entries.next().?).?;
         score_one += calculateScoreOne(op_move, my_move);
         score_two += calculateScoreTwo(op_move, my_move);
     }
