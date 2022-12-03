@@ -48,7 +48,7 @@ const Solution = struct {
     part_2: usize,
 };
 
-fn processStrategyGuideFromFile(filename: []const u8, allocator: *const std.mem.Allocator) !Solution {
+fn solve(filename: []const u8, allocator: *const std.mem.Allocator) !Solution {
     const contents = try utils.readInputFileToBuffer(filename, allocator);
     defer allocator.free(contents);
 
@@ -63,19 +63,18 @@ fn processStrategyGuideFromFile(filename: []const u8, allocator: *const std.mem.
         score_two += calculateScoreTwo(op_move, suggestion);
     }
 
-    return Solution { .part_1 = score_one, .part_2 = score_two };
-
+    return Solution{ .part_1 = score_one, .part_2 = score_two };
 }
 
 pub fn run(allocator: *const std.mem.Allocator) !void {
     utils.printHeader("Day 2");
-    const solution = try processStrategyGuideFromFile("day2.in", allocator);
+    const solution = try solve("day2.in", allocator);
     std.debug.print("Part 1: My score would be {d}\n", .{solution.part_1});
     std.debug.print("Part 2: My score would be {d}\n", .{solution.part_2});
 }
 
 test "day 2 worked example" {
-    const solution = try processStrategyGuideFromFile("day2.test", &std.testing.allocator);
+    const solution = try solve("day2.test", &std.testing.allocator);
     try std.testing.expect(solution.part_1 == 15);
     try std.testing.expect(solution.part_2 == 12);
 }

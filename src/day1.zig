@@ -1,14 +1,11 @@
 const std = @import("std");
 const utils = @import("utils.zig");
+const Solution = utils.Solution;
 
-fn cmpDescending(context: void, a: usize, b: usize) bool {
-    return std.sort.desc(usize)(context, a, b);
-}
+const descending = std.sort.desc(usize);
 
-pub fn run(allocator: *const std.mem.Allocator) !void {
-    utils.printHeader("Day 1");
-
-    const contents = try utils.readInputFileToBuffer("day1.in", allocator);
+fn solve(filename: []const u8, allocator: *const std.mem.Allocator) !Solution {
+    const contents = try utils.readInputFileToBuffer(filename, allocator);
     defer allocator.free(contents);
 
     var calorie_list = std.ArrayList(usize).init(allocator.*);
@@ -30,8 +27,20 @@ pub fn run(allocator: *const std.mem.Allocator) !void {
     var sorted = try calorie_list.toOwnedSlice();
     defer allocator.free(sorted);
 
-    std.sort.sort(usize, sorted, {}, cmpDescending);
+    std.sort.sort(usize, sorted, {}, descending);
 
-    std.debug.print("Part 1: Most well-equipped elf has {d} calories\n", .{sorted[0]});
-    std.debug.print("Part 2: Most well-equipped 3 elves have {d} calories\n", .{sorted[0] + sorted[1] + sorted[2]});
+    return Solution{ .part_1 = sorted[0], .part_2 = sorted[0] + sorted[1] + sorted[2] };
+}
+
+pub fn run(allocator: *const std.mem.Allocator) !void {
+    utils.printHeader("Day 1");
+    const solution = try solve("day1.in", allocator);
+    std.debug.print("Part 1: {d}\n", .{solution.part_1});
+    std.debug.print("Part 2: {d}\n", .{solution.part_2});
+}
+
+test "day 1 worked example" {
+    const solution = try solve("day1.test", &std.testing.allocator);
+    try std.testing.expect(solution.part_1 == 24000);
+    try std.testing.expect(solution.part_2 == 45000);
 }

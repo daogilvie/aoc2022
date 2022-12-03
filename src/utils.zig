@@ -14,3 +14,8 @@ pub fn printHeader(header: []const u8) void {
     const line = header_slice[0 .. header.len + 4];
     std.debug.print("\n{s}\n# {s} #\n{s}\n\n", .{ line, header, line });
 }
+
+pub const Solution = struct {
+    part_1: usize,
+    part_2: usize,
+};
