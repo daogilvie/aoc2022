@@ -51,9 +51,8 @@ fn solve(filename: []const u8, allocator: *const std.mem.Allocator) !Answer {
 
 pub fn run(allocator: *const std.mem.Allocator) void {
     utils.printHeader("Day 4");
-    const solution = solve("day4.in", allocator) catch unreachable;
-    std.debug.print("Part 1: {d}\n", .{solution.part_1});
-    std.debug.print("Part 2: {d}\n", .{solution.part_2});
+    const answer = solve("day4.in", allocator) catch unreachable;
+    answer.print();
 }
 
 test "day 4 assignment parse" {

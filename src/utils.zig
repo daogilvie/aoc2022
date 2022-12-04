@@ -18,4 +18,9 @@ pub fn printHeader(header: []const u8) void {
 pub const Answer = struct {
     part_1: usize,
     part_2: usize,
+
+    pub fn print(self: Answer) void {
+        std.debug.print("Part 1: {d}\n", .{self.part_1});
+        std.debug.print("Part 2: {d}\n", .{self.part_2});
+    }
 };
