@@ -3,8 +3,6 @@ const utils = @import("utils.zig");
 
 const Answer = utils.Answer;
 
-const ItemMap = std.AutoHashMap(u8, u8);
-
 const descending = std.sort.desc(u8);
 
 /// Classic anglophone-centric character-set maths.
@@ -15,6 +13,25 @@ fn getPriority(item: u8) u8 {
         item - 38;
 }
 
+const ItemMap = struct {
+    impacts: [52]u8,
+
+    pub fn init() ItemMap {
+        return ItemMap{ .impacts = [_]u8{0} ** 52 };
+    }
+
+    pub fn markAsSeenWithImpact(self: *ItemMap, item: u8, impact: u8) void {
+        const index: u8 = getPriority(item) - 1;
+        if (self.impacts[index] < impact)
+            self.*.impacts[index] += impact;
+    }
+
+    pub fn getImpact(self: ItemMap, item: u8) u8 {
+        const index: u8 = getPriority(item) - 1;
+        return self.impacts[index];
+    }
+};
+
 const DUPLICATE_PLACEHOLDER = ' ';
 
 /// This function is a bit messy — the elf_trio_item_map is for part 2, but all
@@ -24,13 +41,12 @@ const DUPLICATE_PLACEHOLDER = ' ';
 /// of 2, which means I can uniquely identify which combinations of bags an item
 /// is in. There's probably a bit-flipping whizzbang option here, but this seemed
 /// simpler to write.
-fn itemiseRucksackAndFindDuplicate(rucksack_contents: []const u8, elf_trio_item_map: *ItemMap, item_impact: u8, allocator: *const std.mem.Allocator) u8 {
+fn itemiseRucksackAndFindDuplicate(rucksack_contents: []const u8, elf_trio_item_map: *ItemMap, item_impact: u8) u8 {
     var duplicate: u8 = DUPLICATE_PLACEHOLDER;
     // This internal map is for part 1: it is a bit wasteful in terms of memory,
-    // as I don't need the usize count at all, but I've already got the type
+    // as I don't need the u8 impact at all, but I've already got the type
     // so ¯\_(ツ)_/¯
-    var internal_map = ItemMap.init(allocator.*);
-    defer internal_map.deinit();
+    var internal_map = ItemMap.init();
 
     var halfway_point = rucksack_contents.len / 2;
 
@@ -39,23 +55,15 @@ fn itemiseRucksackAndFindDuplicate(rucksack_contents: []const u8, elf_trio_item_
         // For compartment 1, we just lazily put things we find in the internal
         // map, so that we can check for them again in compartment 2
         if (!in_compartment_2) {
-            internal_map.put(item, 0) catch unreachable;
+            internal_map.markAsSeenWithImpact(item, 1);
         }
 
-        // We look in the trio map, to see if this item has come up before in
-        // the trio, and we add our impact to it if we've not seen it in this
-        // particular bag before.
-        const entry = elf_trio_item_map.getOrPut(item) catch unreachable;
-        const found_in_previous_bag: bool = entry.found_existing and entry.value_ptr.* < item_impact;
-        if (!entry.found_existing) {
-            entry.value_ptr.* = item_impact;
-        } else if (found_in_previous_bag) {
-            entry.value_ptr.* += item_impact;
-        }
+        // The impact approach means this should just be a cinch.
+        elf_trio_item_map.markAsSeenWithImpact(item, item_impact);
 
         // If we haven't set a duplicate, we're in compartment 2, and we've found
         // a dupe... then it's the dupe!
-        if (duplicate == DUPLICATE_PLACEHOLDER and in_compartment_2 and internal_map.contains(item)) {
+        if (duplicate == DUPLICATE_PLACEHOLDER and in_compartment_2 and internal_map.getImpact(item) > 0) {
             duplicate = item;
         }
     }
@@ -67,9 +75,6 @@ fn solve(filename: []const u8, allocator: *const std.mem.Allocator) !Answer {
     const contents = try utils.readInputFileToBuffer(filename, allocator);
     defer allocator.free(contents);
 
-    var elf_trio_items = ItemMap.init(allocator.*);
-    defer elf_trio_items.deinit();
-
     var part_1_priority_sum: usize = 0;
     var part_2_badge_sum: usize = 0;
     var duplicate: u8 = DUPLICATE_PLACEHOLDER;
@@ -80,27 +85,28 @@ fn solve(filename: []const u8, allocator: *const std.mem.Allocator) !Answer {
         const second_rucksack = rucksacks.next().?;
         const third_rucksack = rucksacks.next().?;
 
-        // Start of a new trio, so clear the trio map
-        elf_trio_items.clearRetainingCapacity();
+        var elf_trio_items = ItemMap.init();
 
-        duplicate = itemiseRucksackAndFindDuplicate(first_rucksack, &elf_trio_items, 1, allocator);
+        duplicate = itemiseRucksackAndFindDuplicate(first_rucksack, &elf_trio_items, 1);
         part_1_priority_sum += getPriority(duplicate);
 
-        duplicate = itemiseRucksackAndFindDuplicate(second_rucksack, &elf_trio_items, 2, allocator);
+        duplicate = itemiseRucksackAndFindDuplicate(second_rucksack, &elf_trio_items, 2);
         part_1_priority_sum += getPriority(duplicate);
 
-        duplicate = itemiseRucksackAndFindDuplicate(third_rucksack, &elf_trio_items, 4, allocator);
+        duplicate = itemiseRucksackAndFindDuplicate(third_rucksack, &elf_trio_items, 4);
         part_1_priority_sum += getPriority(duplicate);
 
         // There will be only one key in the map with a value of 7, and this
-        // is the one present in all three rucksacks. The else branch is unreachable
-        // here (assuming no bugs or bad data), so I mark it as such to prevent the
-        // compiler fretting about mismatched types on the arm.
-        var badge_candidates = elf_trio_items.iterator();
-        const badge_item = while (badge_candidates.next()) |entry| {
-            if (entry.value_ptr.* == 7) break entry.key_ptr.*;
+        // is the one present in all three rucksacks. I can use the index + 1
+        // as the priority, don't even need to know the item.
+        // The else unreachable is just to stop the compiler fretting about
+        // mismatched types in the for-expression, as I know we will always
+        // break out of the loop.
+        part_2_badge_sum += for (elf_trio_items.impacts) |impact, index| {
+            if (impact == 7) {
+                break index + 1;
+            }
         } else unreachable;
-        part_2_badge_sum += getPriority(badge_item);
     }
 
     return Answer{ .part_1 = part_1_priority_sum, .part_2 = part_2_badge_sum };
@@ -125,8 +131,7 @@ test "day 3 priority cast" {
 test "day 3 rucksack duplicate checker" {
     const contents = try utils.readInputFileToBuffer("day3.test", &std.testing.allocator);
     defer std.testing.allocator.free(contents);
-    var map = ItemMap.init(std.testing.allocator);
-    defer map.deinit();
+    var map = ItemMap.init();
 
     const dupes = [6]u8{ 'p', 'L', 'P', 'v', 't', 's' };
     var index: u8 = 0;
@@ -134,7 +139,7 @@ test "day 3 rucksack duplicate checker" {
     var rucksacks = std.mem.tokenize(u8, contents, "\n");
 
     while (rucksacks.next()) |rucksack| {
-        const dupe = itemiseRucksackAndFindDuplicate(rucksack, &map, 1, &std.testing.allocator);
+        const dupe = itemiseRucksackAndFindDuplicate(rucksack, &map, 1);
         const desired = dupes[index];
         std.testing.expectEqual(dupe, desired) catch |err| {
             std.debug.print("{c} is not {c}\n", .{ dupe, desired });
