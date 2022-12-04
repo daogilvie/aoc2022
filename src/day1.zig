@@ -1,10 +1,10 @@
 const std = @import("std");
 const utils = @import("utils.zig");
-const Solution = utils.Solution;
+const Answer = utils.Answer;
 
 const descending = std.sort.desc(usize);
 
-fn solve(filename: []const u8, allocator: *const std.mem.Allocator) !Solution {
+fn solve(filename: []const u8, allocator: *const std.mem.Allocator) !Answer {
     const contents = try utils.readInputFileToBuffer(filename, allocator);
     defer allocator.free(contents);
 
@@ -29,12 +29,12 @@ fn solve(filename: []const u8, allocator: *const std.mem.Allocator) !Solution {
 
     std.sort.sort(usize, sorted, {}, descending);
 
-    return Solution{ .part_1 = sorted[0], .part_2 = sorted[0] + sorted[1] + sorted[2] };
+    return Answer{ .part_1 = sorted[0], .part_2 = sorted[0] + sorted[1] + sorted[2] };
 }
 
-pub fn run(allocator: *const std.mem.Allocator) !void {
+pub fn run(allocator: *const std.mem.Allocator) void {
     utils.printHeader("Day 1");
-    const solution = try solve("day1.in", allocator);
+    const solution = solve("day1.in", allocator) catch unreachable;
     std.debug.print("Part 1: {d}\n", .{solution.part_1});
     std.debug.print("Part 2: {d}\n", .{solution.part_2});
 }

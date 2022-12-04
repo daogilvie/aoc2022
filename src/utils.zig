@@ -15,7 +15,7 @@ pub fn printHeader(header: []const u8) void {
     std.debug.print("\n{s}\n# {s} #\n{s}\n\n", .{ line, header, line });
 }
 
-pub const Solution = struct {
+pub const Answer = struct {
     part_1: usize,
     part_2: usize,
 };

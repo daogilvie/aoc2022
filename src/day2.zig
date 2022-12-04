@@ -1,6 +1,8 @@
 const std = @import("std");
 const utils = @import("utils.zig");
 
+const Answer = utils.Answer;
+
 const OpposingMove = enum(u8) {
     A = 1,
     B = 2,
@@ -43,12 +45,7 @@ fn calculateScoreTwo(opponent_move: OpposingMove, suggestion: GuideSuggestion) u
     };
 }
 
-const Solution = struct {
-    part_1: usize,
-    part_2: usize,
-};
-
-fn solve(filename: []const u8, allocator: *const std.mem.Allocator) !Solution {
+fn solve(filename: []const u8, allocator: *const std.mem.Allocator) !Answer {
     const contents = try utils.readInputFileToBuffer(filename, allocator);
     defer allocator.free(contents);
 
@@ -63,12 +60,12 @@ fn solve(filename: []const u8, allocator: *const std.mem.Allocator) !Solution {
         score_two += calculateScoreTwo(op_move, suggestion);
     }
 
-    return Solution{ .part_1 = score_one, .part_2 = score_two };
+    return Answer{ .part_1 = score_one, .part_2 = score_two };
 }
 
-pub fn run(allocator: *const std.mem.Allocator) !void {
+pub fn run(allocator: *const std.mem.Allocator) void {
     utils.printHeader("Day 2");
-    const solution = try solve("day2.in", allocator);
+    const solution = solve("day2.in", allocator) catch unreachable;
     std.debug.print("Part 1: My score would be {d}\n", .{solution.part_1});
     std.debug.print("Part 2: My score would be {d}\n", .{solution.part_2});
 }

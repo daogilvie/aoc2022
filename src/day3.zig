@@ -1,7 +1,7 @@
 const std = @import("std");
 const utils = @import("utils.zig");
 
-const Solution = utils.Solution;
+const Answer = utils.Answer;
 
 const ItemMap = std.AutoHashMap(u8, u8);
 
@@ -63,7 +63,7 @@ fn itemiseRucksackAndFindDuplicate(rucksack_contents: []const u8, elf_trio_item_
     return duplicate;
 }
 
-fn solve(filename: []const u8, allocator: *const std.mem.Allocator) !Solution {
+fn solve(filename: []const u8, allocator: *const std.mem.Allocator) !Answer {
     const contents = try utils.readInputFileToBuffer(filename, allocator);
     defer allocator.free(contents);
 
@@ -103,12 +103,12 @@ fn solve(filename: []const u8, allocator: *const std.mem.Allocator) !Solution {
         part_2_badge_sum += getPriority(badge_item);
     }
 
-    return Solution{ .part_1 = part_1_priority_sum, .part_2 = part_2_badge_sum };
+    return Answer{ .part_1 = part_1_priority_sum, .part_2 = part_2_badge_sum };
 }
 
-pub fn run(allocator: *const std.mem.Allocator) !void {
+pub fn run(allocator: *const std.mem.Allocator) void {
     utils.printHeader("Day 3");
-    const solution = try solve("day3.in", allocator);
+    const solution = solve("day3.in", allocator) catch unreachable;
     std.debug.print("Part 1: {d}\n", .{solution.part_1});
     std.debug.print("Part 2: {d}\n", .{solution.part_2});
 }
