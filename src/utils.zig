@@ -24,3 +24,19 @@ pub const Answer = struct {
         std.debug.print("Part 2: {d}\n", .{self.part_2});
     }
 };
+
+pub const AnswerStr = struct {
+    part_1: []const u8,
+    part_2: []const u8,
+    allocator: std.mem.Allocator,
+
+    pub fn print(self: AnswerStr) void {
+        std.debug.print("Part 1: {s}\n", .{self.part_1});
+        std.debug.print("Part 2: {s}\n", .{self.part_2});
+    }
+
+    pub fn deinit(self: *AnswerStr) void {
+        self.allocator.free(self.part_1);
+        self.allocator.free(self.part_2);
+    }
+};
