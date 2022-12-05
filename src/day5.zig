@@ -13,6 +13,15 @@ const print = std.debug.print;
 
 const BunchOfStacks = struct {
     stacks: ArrayList(ArrayList(u8)),
+    allocator: Allocator,
+
+    fn init(allocator: Allocator) BunchOfStacks {
+        return BunchOfStacks{ .stacks = ArrayList(ArrayList(u8)).init(allocator), .allocator = allocator };
+    }
+
+    fn addStack(self: *BunchOfStacks) !void {
+        try self.stacks.append(ArrayList(u8).init(self.allocator));
+    }
 
     pub fn deinit(self: *BunchOfStacks) void {
         var stacks = self.stacks;
@@ -22,6 +31,21 @@ const BunchOfStacks = struct {
             stack.deinit();
         }
         stacks.deinit();
+    }
+
+    fn moveCrates(self: *BunchOfStacks, amount: usize, source: usize, dest: usize) !void {
+        const source_height = self.stacks.items[source - 1].items.len;
+        const crate_slice = self.stacks.items[source - 1].items[(source_height - amount)..];
+        try self.stacks.items[dest - 1].appendSlice(crate_slice);
+        self.stacks.items[source - 1].shrinkRetainingCapacity(source_height - amount);
+    }
+
+    fn getTopRow(self: BunchOfStacks) []u8 {
+        var crate_tops: []u8 = self.allocator.alloc(u8, self.stacks.items.len) catch unreachable;
+        for (self.stacks.items) |stack, index| {
+            crate_tops[index] = stack.items[stack.items.len - 1];
+        }
+        return crate_tops;
     }
 };
 
@@ -33,38 +57,41 @@ fn parseStartingStacks(input: []const u8, allocator: *const Allocator) !BunchOfS
         try stack_lines_reordered.append(line);
     }
     var stack_defs = std.mem.tokenize(u8, stack_lines_reordered.pop(), " ");
-    var stacks = ArrayList(ArrayList(u8)).init(allocator.*);
+    var bunch_of_stacks = BunchOfStacks.init(allocator.*);
     while (stack_defs.next()) |_| {
-        try stacks.append(ArrayList(u8).init(allocator.*));
+        try bunch_of_stacks.addStack();
     }
 
     while (stack_lines_reordered.popOrNull()) |layer| {
-        for (stacks.items) |*stack, index| {
+        for (bunch_of_stacks.stacks.items) |*stack, index| {
             const crate_id: u8 = layer[(index * 4) + 1];
             if (crate_id != ' ') {
                 try stack.append(crate_id);
             }
         }
     }
-    return BunchOfStacks{ .stacks = stacks };
+    return bunch_of_stacks;
 }
 
-// Part 1 and part 2 have divergent states, so we solve them both independently
-// from scratch
-fn part1(filename: []const u8, allocator: *const Allocator) ![]u8 {
+pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
     const contents = try utils.readInputFileToBuffer(filename, allocator);
     defer allocator.free(contents);
 
     var puzzle_segments = std.mem.split(u8, contents, "\n\n");
 
     const starting_stacks = puzzle_segments.next().?;
-    var stacks = try parseStartingStacks(starting_stacks, allocator);
-    defer stacks.deinit();
+
+    // As the stacks have different intermediate states, we just operate
+    // two different data structures.
+    var stacks_part1 = try parseStartingStacks(starting_stacks, allocator);
+    var stacks_part2 = try parseStartingStacks(starting_stacks, allocator);
+    defer stacks_part1.deinit();
+    defer stacks_part2.deinit();
 
     const instruction_lines = puzzle_segments.next().?;
     var instructions = std.mem.tokenize(u8, instruction_lines, " \n");
     while (instructions.next()) |_| {
-        // First part is the verb, we skip for now
+        // First part is the verb, this is always "move" so skip it
         // Get the amount next
         const amount: usize = try std.fmt.parseInt(usize, instructions.next().?, 10);
         // now skip _from_
@@ -78,67 +105,12 @@ fn part1(filename: []const u8, allocator: *const Allocator) ![]u8 {
 
         var crates_moved: usize = 0;
         while (crates_moved < amount) : (crates_moved += 1) {
-            try stacks.stacks.items[dest - 1].append(stacks.stacks.items[source - 1].popOrNull().?);
+            try stacks_part1.moveCrates(1, source, dest);
         }
+        try stacks_part2.moveCrates(amount, source, dest);
     }
 
-    // Crate Tops!
-    var crate_tops: []u8 = try allocator.*.alloc(u8, stacks.stacks.items.len);
-    for (stacks.stacks.items) |stack, index| {
-        crate_tops[index] = stack.items[stack.items.len - 1];
-    }
-    return crate_tops;
-}
-
-fn moveCrates9001(stacks: *BunchOfStacks, amount: usize, source: usize, dest: usize) !void {
-    const source_height = stacks.stacks.items[source - 1].items.len;
-    const crate_slice = stacks.stacks.items[source - 1].items[(source_height - amount)..];
-    try stacks.stacks.items[dest - 1].appendSlice(crate_slice);
-    stacks.stacks.items[source - 1].shrinkRetainingCapacity(source_height - amount);
-}
-
-fn part2(filename: []const u8, allocator: *const Allocator) ![]u8 {
-    const contents = try utils.readInputFileToBuffer(filename, allocator);
-    defer allocator.free(contents);
-
-    var puzzle_segments = std.mem.split(u8, contents, "\n\n");
-
-    const starting_stacks = puzzle_segments.next().?;
-    var stacks = try parseStartingStacks(starting_stacks, allocator);
-    defer stacks.deinit();
-
-    const instruction_lines = puzzle_segments.next().?;
-    var instructions = std.mem.tokenize(u8, instruction_lines, " \n");
-    while (instructions.next()) |_| {
-        // First part is the verb, we skip for now
-        // Get the amount next
-        const amount: usize = try std.fmt.parseInt(usize, instructions.next().?, 10);
-        // now skip _from_
-        _ = instructions.next();
-        // Now get source
-        const source: usize = try std.fmt.parseInt(usize, instructions.next().?, 10);
-        // Now skip _to_
-        _ = instructions.next();
-        // Now get dest
-        const dest: usize = try std.fmt.parseInt(usize, instructions.next().?, 10);
-
-        // Part 2
-        try moveCrates9001(&stacks, amount, source, dest);
-    }
-
-    // Crate Tops!
-    var crate_tops: []u8 = try allocator.*.alloc(u8, stacks.stacks.items.len);
-    for (stacks.stacks.items) |stack, index| {
-        crate_tops[index] = stack.items[stack.items.len - 1];
-    }
-
-    return crate_tops;
-}
-
-pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
-    var part_1 = try part1(filename, allocator);
-    var part_2 = try part2(filename, allocator);
-    return Answer{ .part_1 = part_1, .part_2 = part_2, .allocator = allocator.* };
+    return Answer{ .part_1 = stacks_part1.getTopRow(), .part_2 = stacks_part2.getTopRow(), .allocator = allocator.* };
 }
 
 pub fn run(allocator: *const Allocator) void {
@@ -155,5 +127,8 @@ test "day 5 worked example" {
         print("\"{s}\" is not \"CMZ\"\n", .{answer.part_1});
         return err;
     };
-    try std.testing.expect(std.mem.eql(u8, answer.part_2, "MCD"));
+    std.testing.expect(std.mem.eql(u8, answer.part_2, "MCD")) catch |err| {
+        print("\"{s}\" is not \"MCD\"\n", .{answer.part_1});
+        return err;
+    };
 }
