@@ -11,68 +11,6 @@ const Stack = ArrayList(u8);
 
 const print = std.debug.print;
 
-const BunchOfStacks = struct {
-    stacks: ArrayList(ArrayList(u8)),
-    allocator: Allocator,
-
-    fn init(allocator: Allocator) BunchOfStacks {
-        return BunchOfStacks{ .stacks = ArrayList(ArrayList(u8)).init(allocator), .allocator = allocator };
-    }
-
-    fn addStack(self: *BunchOfStacks) !void {
-        try self.stacks.append(ArrayList(u8).init(self.allocator));
-    }
-
-    pub fn deinit(self: *BunchOfStacks) void {
-        var stacks = self.stacks;
-        var stacks_cleared: usize = 0;
-        while (stacks_cleared < stacks.items.len) : (stacks_cleared += 1) {
-            var stack = stacks.items[stacks_cleared];
-            stack.deinit();
-        }
-        stacks.deinit();
-    }
-
-    fn moveCrates(self: *BunchOfStacks, amount: usize, source: usize, dest: usize) !void {
-        const source_height = self.stacks.items[source - 1].items.len;
-        const crate_slice = self.stacks.items[source - 1].items[(source_height - amount)..];
-        try self.stacks.items[dest - 1].appendSlice(crate_slice);
-        self.stacks.items[source - 1].shrinkRetainingCapacity(source_height - amount);
-    }
-
-    fn getTopRow(self: BunchOfStacks) []u8 {
-        var crate_tops: []u8 = self.allocator.alloc(u8, self.stacks.items.len) catch unreachable;
-        for (self.stacks.items) |stack, index| {
-            crate_tops[index] = stack.items[stack.items.len - 1];
-        }
-        return crate_tops;
-    }
-};
-
-fn parseStartingStacks(input: []const u8, allocator: *const Allocator) !BunchOfStacks {
-    var stack_lines = std.mem.tokenize(u8, input, "\n");
-    var stack_lines_reordered = ArrayList([]const u8).init(allocator.*);
-    defer stack_lines_reordered.deinit();
-    while (stack_lines.next()) |line| {
-        try stack_lines_reordered.append(line);
-    }
-    var stack_defs = std.mem.tokenize(u8, stack_lines_reordered.pop(), " ");
-    var bunch_of_stacks = BunchOfStacks.init(allocator.*);
-    while (stack_defs.next()) |_| {
-        try bunch_of_stacks.addStack();
-    }
-
-    while (stack_lines_reordered.popOrNull()) |layer| {
-        for (bunch_of_stacks.stacks.items) |*stack, index| {
-            const crate_id: u8 = layer[(index * 4) + 1];
-            if (crate_id != ' ') {
-                try stack.append(crate_id);
-            }
-        }
-    }
-    return bunch_of_stacks;
-}
-
 /// Classic anglophone-centric character-set maths.
 fn toInd(char: u8) usize {
      return char - 97;
