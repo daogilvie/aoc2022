@@ -13,13 +13,12 @@ const print = std.debug.print;
 
 /// Classic anglophone-centric character-set maths.
 fn toInd(char: u8) usize {
-     return char - 97;
+    return char - 97;
 }
 
 fn fromInd(ind: usize) u8 {
-     return @truncate(u8, ind + 97);
+    return @truncate(u8, ind + 97);
 }
-
 
 const PART_1_WINDOW_LENGTH: usize = 4;
 const PART_2_WINDOW_LENGTH: usize = 14;
