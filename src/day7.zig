@@ -12,6 +12,8 @@ const print = std.debug.print;
 const ascending = std.sort.asc(usize);
 
 const CUTOFF_SIZE: usize = 100000;
+const CAPACITY: usize = 70000000;
+const TARGET_USAGE: usize = CAPACITY - 30000000;
 
 fn makePrefixedName(dir_stack: ArrayList([]u8), dirname: []const u8, allocator: Allocator) []u8 {
     // Base case
@@ -21,17 +23,17 @@ fn makePrefixedName(dir_stack: ArrayList([]u8), dirname: []const u8, allocator: 
         return bytes;
     } else {
         var running_len: usize = 0;
-        for (dir_stack.items) | dir | {
+        for (dir_stack.items) |dir| {
             running_len += dir.len + 1;
         }
         var bytes: []u8 = allocator.alloc(u8, running_len + dirname.len) catch unreachable;
         running_len = 0;
-        for (dir_stack.items) | item | {
-            std.mem.copy(u8, bytes[running_len..running_len+item.len], item);
+        for (dir_stack.items) |item| {
+            std.mem.copy(u8, bytes[running_len .. running_len + item.len], item);
             running_len += item.len;
             bytes[running_len] = '/';
         }
-        std.mem.copy(u8, bytes[bytes.len-dirname.len..], dirname);
+        std.mem.copy(u8, bytes[bytes.len - dirname.len ..], dirname);
         return bytes;
     }
 }
@@ -54,17 +56,17 @@ pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
     defer dir_size_map.deinit();
     var dir_stack = ArrayList([]u8).init(allocator.*);
     defer clearDirStack(dir_stack, allocator.*);
-    while (lines.next()) | line | {
+    var full_sum: usize = 0;
+    while (lines.next()) |line| {
         if (std.mem.eql(u8, line, "$ ls")) {
             // ls lines are meaningless to us (at least in part 1)
             continue;
         }
         if (std.mem.startsWith(u8, line, "$ cd")) {
             if (std.mem.endsWith(u8, line, "/")) {
-              // We should clear the dir stack
-              dir_stack.clearRetainingCapacity();
-            }
-            else if (std.mem.endsWith(u8, line, "..")) {
+                // We should clear the dir stack
+                dir_stack.clearRetainingCapacity();
+            } else if (std.mem.endsWith(u8, line, "..")) {
                 var item = dir_stack.pop();
                 allocator.free(item);
             } else {
@@ -83,20 +85,30 @@ pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
                     entry.value_ptr.* += filesize;
                 }
             }
+            full_sum += filesize;
         }
     }
 
     var values: []usize = dir_size_map.values();
     std.sort.sort(usize, values, {}, ascending);
     var running_sum: usize = 0;
-    var index: usize = 1;
-    var size = values[0];
-    while (size < CUTOFF_SIZE) : (index += 1) {
-        running_sum += size;
-        size = values[index];
+    {
+        var index: usize = 1;
+        var size = values[0];
+        while (size < CUTOFF_SIZE) : (index += 1) {
+            running_sum += size;
+            size = values[index];
+        }
     }
 
-    return Answer{ .part_1 = running_sum, .part_2 = 0 };
+    // Part 2
+    std.mem.reverse(usize, values);
+    var target_size = for (values) |filesize, index| {
+        const test_total = full_sum - filesize;
+        if (test_total > TARGET_USAGE) break values[index - 1];
+    } else unreachable;
+
+    return Answer{ .part_1 = running_sum, .part_2 = target_size };
 }
 
 pub fn run(allocator: *const Allocator) void {
@@ -111,8 +123,8 @@ test "day 7 worked example" {
         print("{d} is not 95437\n", .{answer.part_1});
         return err;
     };
-    // std.testing.expect(answer.part_2 == 19) catch |err| {
-    //     print("{d} is not 19\n", .{answer.part_2});
-    //     return err;
-    // };
+    std.testing.expect(answer.part_2 == 24933642) catch |err| {
+        print("{d} is not 24933642\n", .{answer.part_2});
+        return err;
+    };
 }
