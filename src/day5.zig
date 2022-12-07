@@ -7,8 +7,6 @@ const Allocator = std.mem.Allocator;
 const Answer = utils.AnswerStr;
 const ArrayList = std.ArrayList;
 
-const Stack = ArrayList(u8);
-
 const print = std.debug.print;
 
 const BunchOfStacks = struct {
