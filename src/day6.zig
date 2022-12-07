@@ -5,9 +5,6 @@ const str = []const u8;
 
 const Allocator = std.mem.Allocator;
 const Answer = utils.Answer;
-const ArrayList = std.ArrayList;
-
-const Stack = ArrayList(u8);
 
 const print = std.debug.print;
 
