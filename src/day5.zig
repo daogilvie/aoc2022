@@ -50,19 +50,14 @@ const BunchOfStacks = struct {
 };
 
 fn parseStartingStacks(input: []const u8, allocator: *const Allocator) !BunchOfStacks {
-    var stack_lines = std.mem.tokenize(u8, input, "\n");
-    var stack_lines_reordered = ArrayList([]const u8).init(allocator.*);
-    defer stack_lines_reordered.deinit();
-    while (stack_lines.next()) |line| {
-        try stack_lines_reordered.append(line);
-    }
-    var stack_defs = std.mem.tokenize(u8, stack_lines_reordered.pop(), " ");
+    var stack_lines_reordered = std.mem.splitBackwards(u8, input, "\n");
+    var stack_defs = std.mem.tokenize(u8, stack_lines_reordered.next().?, " ");
     var bunch_of_stacks = BunchOfStacks.init(allocator.*);
     while (stack_defs.next()) |_| {
         try bunch_of_stacks.addStack();
     }
 
-    while (stack_lines_reordered.popOrNull()) |layer| {
+    while (stack_lines_reordered.next()) |layer| {
         for (bunch_of_stacks.stacks.items) |*stack, index| {
             const crate_id: u8 = layer[(index * 4) + 1];
             if (crate_id != ' ') {
