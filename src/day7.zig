@@ -51,7 +51,8 @@ pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
 
     var lines = std.mem.tokenize(u8, contents, "\n");
 
-    // Make a map to store directory sizes
+    // Make a map to store directory sizes as fully qualified paths —
+    // just in case there are any sub dirs with the same name knocking about.
     var dir_size_map = std.StringArrayHashMap(usize).init(allocator.*);
     defer dir_size_map.deinit();
     var dir_stack = ArrayList([]u8).init(allocator.*);
@@ -59,7 +60,7 @@ pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
     var full_sum: usize = 0;
     while (lines.next()) |line| {
         if (std.mem.eql(u8, line, "$ ls")) {
-            // ls lines are meaningless to us (at least in part 1)
+            // ls lines are meaningless to us!
             continue;
         }
         if (std.mem.startsWith(u8, line, "$ cd")) {
@@ -67,16 +68,20 @@ pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
                 // We should clear the dir stack
                 dir_stack.clearRetainingCapacity();
             } else if (std.mem.endsWith(u8, line, "..")) {
+                // Pop back up a dir and deallocate the name buffer for
+                // the dir like a good citizen.
                 var item = dir_stack.pop();
                 allocator.free(item);
             } else {
+                // ASSUMPTION: A cd line like this is descending into a new dir
                 try dir_stack.append(makePrefixedName(dir_stack, line[5..], allocator.*));
             }
         } else if (!std.mem.startsWith(u8, line, "dir")) {
             var parts = std.mem.tokenize(u8, line, " ");
             var filesize = try std.fmt.parseInt(usize, parts.next().?, 10);
             // This filesize counts for every directory in the stack,
-            // so lets update them all.
+            // so lets update them all, plus add it to the full sum for the
+            // root directory.
             for (dir_stack.items) |nested_dirname| {
                 var entry = try dir_size_map.getOrPut(nested_dirname);
                 if (!entry.found_existing) {
@@ -91,24 +96,24 @@ pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
 
     var values: []usize = dir_size_map.values();
     std.sort.sort(usize, values, {}, ascending);
-    var running_sum: usize = 0;
+    
+    var part_1_answer: usize = 0;
     {
         var index: usize = 1;
         var size = values[0];
         while (size < CUTOFF_SIZE) : (index += 1) {
-            running_sum += size;
+            part_1_answer += size;
             size = values[index];
         }
     }
 
-    // Part 2
     std.mem.reverse(usize, values);
-    var target_size = for (values) |filesize, index| {
+    var part_2_answer = for (values) |filesize, index| {
         const test_total = full_sum - filesize;
         if (test_total > TARGET_USAGE) break values[index - 1];
     } else unreachable;
 
-    return Answer{ .part_1 = running_sum, .part_2 = target_size };
+    return Answer{ .part_1 = part_1_answer, .part_2 = part_2_answer };
 }
 
 pub fn run(allocator: *const Allocator) void {
