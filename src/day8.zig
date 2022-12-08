@@ -38,8 +38,11 @@ const Grove = struct {
         var lines = std.mem.tokenize(u8, content, "\n");
         var running_len: usize = 0;
         while (lines.next()) |line| {
-            std.mem.copy(u8, trees[running_len .. running_len + line.len], line);
-            running_len += line.len;
+            for (line) |tree| {
+                // -48 is the magic number to make number chars into numbers
+                trees[running_len] = tree - 48;
+                running_len += 1;
+            }
         }
 
         var sightlines: []SightlineTracker = try allocator.alloc(SightlineTracker, height * width);
@@ -81,7 +84,7 @@ const Grove = struct {
             col = 0;
             while (col < self.height) : (col += 1) {
                 const index = self.coordsToIndex(row, col);
-                const my_height: u8 = self.trees[index] - 48;
+                const my_height: u8 = self.trees[index];
                 self.sightlines[index].left = sightline_distances[my_height];
                 updateSightlineDistances(&sightline_distances, my_height);
             }
@@ -95,7 +98,7 @@ const Grove = struct {
 
             while (col > 0) : (col -= 1) {
                 const index = self.coordsToIndex(row, col - 1);
-                const my_height: u8 = self.trees[index] - 48;
+                const my_height: u8 = self.trees[index];
                 self.sightlines[index].right = sightline_distances[my_height];
                 updateSightlineDistances(&sightline_distances, my_height);
             }
@@ -108,7 +111,7 @@ const Grove = struct {
             row = 0;
             while (row < self.height) : (row += 1) {
                 const index = self.coordsToIndex(row, col);
-                const my_height: u8 = self.trees[index] - 48;
+                const my_height: u8 = self.trees[index];
                 self.sightlines[index].up = sightline_distances[my_height];
                 updateSightlineDistances(&sightline_distances, my_height);
             }
@@ -121,7 +124,7 @@ const Grove = struct {
             row = self.height;
             while (row > 0) : (row -= 1) {
                 const index = self.coordsToIndex(row - 1, col);
-                const my_height: u8 = self.trees[index] - 48;
+                const my_height: u8 = self.trees[index];
                 self.sightlines[index].down = sightline_distances[my_height];
                 updateSightlineDistances(&sightline_distances, my_height);
             }
