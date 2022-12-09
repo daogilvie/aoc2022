@@ -32,10 +32,11 @@ const BunchOfStacks = struct {
     }
 
     fn moveCrates(self: *BunchOfStacks, amount: usize, source: usize, dest: usize) !void {
-        const source_height = self.stacks.items[source - 1].items.len;
-        const crate_slice = self.stacks.items[source - 1].items[(source_height - amount)..];
+        const source_list: *ArrayList(u8) = &self.stacks.items[source - 1];
+        const source_height = source_list.items.len;
+        const crate_slice = source_list.items[(source_height - amount)..];
         try self.stacks.items[dest - 1].appendSlice(crate_slice);
-        self.stacks.items[source - 1].shrinkRetainingCapacity(source_height - amount);
+        source_list.shrinkRetainingCapacity(source_height - amount);
     }
 
     fn getTopRow(self: BunchOfStacks) []u8 {
