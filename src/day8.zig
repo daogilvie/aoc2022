@@ -76,7 +76,7 @@ const Grove = struct {
         var row: usize = 0;
         var col: usize = 0;
 
-        var sightline_distances: [10]usize = .{SIGHTLINE_STARTER} ** 10;
+        var sightline_distances: [10]usize = undefined;
 
         // From left
         while (row < self.width) : (row += 1) {
