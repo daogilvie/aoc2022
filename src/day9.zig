@@ -79,7 +79,6 @@ pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
     try tail_positions.put(knot_positions[9], {});
     try second_positions.put(knot_positions[1], {});
 
-    // Loop 1: calculate
     var step: usize = 0;
     var instructions = std.mem.tokenize(u8, content, " \n");
     while (instructions.next()) |dir_letter| {
