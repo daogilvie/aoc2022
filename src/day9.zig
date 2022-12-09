@@ -10,13 +10,13 @@ const print = std.debug.print;
 
 const Direction = enum(u8) {
     U,
-    U_R,
+    UR,
     R,
-    D_R,
+    DR,
     D,
-    D_L,
+    DL,
     L,
-    U_L,
+    UL,
 };
 
 const Position = struct {
@@ -32,22 +32,22 @@ const Position = struct {
     fn step(self: *Position, direction: Direction) void {
         switch (direction) {
             .U => self.y += 1,
-            .U_R => {
+            .UR => {
                 self.x += 1;
                 self.y += 1;
             },
             .R => self.x += 1,
-            .D_R => {
+            .DR => {
                 self.x += 1;
                 self.y -= 1;
             },
             .D => self.y -= 1,
-            .D_L => {
+            .DL => {
                 self.x -= 1;
                 self.y -= 1;
             },
             .L => self.x -= 1,
-            .U_L => {
+            .UL => {
                 self.x -= 1;
                 self.y += 1;
             },
@@ -56,9 +56,9 @@ const Position = struct {
 
     fn snap_step_direction(self: Position, other: *Position) Direction {
         if (self.x > other.x) {
-            if (self.y > other.y) return .U_R else if (self.y < other.y) return .D_R else return .R;
+            if (self.y > other.y) return .UR else if (self.y < other.y) return .DR else return .R;
         } else if (self.x < other.x) {
-            if (self.y > other.y) return .U_L else if (self.y < other.y) return .D_L else return .L;
+            if (self.y > other.y) return .UL else if (self.y < other.y) return .DL else return .L;
         } else if (self.y > other.y) return .U else return .D;
     }
 };
