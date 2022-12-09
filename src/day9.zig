@@ -32,32 +32,34 @@ const Position = struct {
     fn step(self: *Position, direction: Direction) void {
         switch (direction) {
             .U => self.y += 1,
-            .U_R => { self.x += 1; self.y += 1;},
+            .U_R => {
+                self.x += 1;
+                self.y += 1;
+            },
             .R => self.x += 1,
-            .D_R => { self.x += 1; self.y -= 1;},
+            .D_R => {
+                self.x += 1;
+                self.y -= 1;
+            },
             .D => self.y -= 1,
-            .D_L => { self.x -= 1; self.y -= 1;},
+            .D_L => {
+                self.x -= 1;
+                self.y -= 1;
+            },
             .L => self.x -= 1,
-            .U_L => { self.x -= 1; self.y += 1;},
+            .U_L => {
+                self.x -= 1;
+                self.y += 1;
+            },
         }
     }
 
-    fn closest_aligned_neighbour(self: Position, other: Position) Position {
-        var neighbour = Position {.x = self.x, .y = self.y};
-        const steps_x = std.math.absInt(self.x - other.x) catch unreachable;
-        const steps_y = std.math.absInt(self.y - other.y) catch unreachable;
-
-        if (steps_x > steps_y) {
-            if (self.x > other.x) neighbour.x -= 1 else neighbour.x += 1;
-        } else {
-            if (self.y > other.y) neighbour.y -= 1 else neighbour.y += 1;
-        }
-
-        return neighbour;
-    }
-
-    fn printCoords(self: Position) void {
-        print("({d},{d})", .{self.x, self.y});
+    fn snap_step_direction(self: Position, other: *Position) Direction {
+        if (self.x > other.x) {
+            if (self.y > other.y) return .U_R else if (self.y < other.y) return .D_R else return .R;
+        } else if (self.x < other.x) {
+            if (self.y > other.y) return .U_L else if (self.y < other.y) return .D_L else return .L;
+        } else if (self.y > other.y) return .U else return .D;
     }
 };
 
@@ -66,7 +68,6 @@ const PositionSet = std.AutoHashMap(Position, void);
 pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
     const content = try utils.readInputFileToBuffer(filename, allocator);
     defer allocator.free(content);
-
 
     var knot_positions: [10]Position = .{Position{}} ** 10;
 
@@ -78,6 +79,8 @@ pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
     try tail_positions.put(knot_positions[9], {});
     try second_positions.put(knot_positions[1], {});
 
+    // Loop 1: calculate
+    var step: usize = 0;
     var instructions = std.mem.tokenize(u8, content, " \n");
     while (instructions.next()) |dir_letter| {
         const dir = std.meta.stringToEnum(Direction, dir_letter).?;
@@ -91,12 +94,13 @@ pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
                     continue;
                 }
                 if (knot.steps_away(knot_positions[index - 1]) >= 2) {
-                    knot_positions[index] = knot_positions[index - 1].closest_aligned_neighbour(knot.*);
+                    knot.step(knot_positions[index - 1].snap_step_direction(knot));
                 }
             }
             try tail_positions.put(knot_positions[9], {});
             try second_positions.put(knot_positions[1], {});
         }
+        step += 1;
     }
 
     return Answer{ .part_1 = second_positions.count(), .part_2 = tail_positions.count() };
