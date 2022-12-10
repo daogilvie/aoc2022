@@ -15,15 +15,20 @@ pub fn printHeader(header: []const u8) void {
     std.debug.print("\n{s}\n# {s} #\n{s}\n\n", .{ line, header, line });
 }
 
-pub const Answer = struct {
-    part_1: usize,
-    part_2: usize,
+pub fn NumericAnswer(comptime T: type) type {
+    return struct {
+        const This = @This();
+        part_1: T,
+        part_2: T,
 
-    pub fn print(self: Answer) void {
-        std.debug.print("Part 1: {d}\n", .{self.part_1});
-        std.debug.print("Part 2: {d}\n", .{self.part_2});
-    }
-};
+        pub fn print(self: This) void {
+            std.debug.print("Part 1: {d}\n", .{self.part_1});
+            std.debug.print("Part 2: {d}\n", .{self.part_2});
+        }
+    };
+}
+
+pub const Answer = NumericAnswer(usize);
 
 pub const AnswerStr = struct {
     part_1: []const u8,
