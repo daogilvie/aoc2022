@@ -98,20 +98,56 @@ fn clearOutMonkeys(monkehs: *ArrayList(Monkey)) void {
     monkehs.*.deinit();
 }
 
-pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
-    const content = try utils.readInputFileToBuffer(filename, allocator);
-    defer allocator.free(content);
-
+fn createMonkeyList(content: []const u8, allocator: Allocator) ArrayList(Monkey) {
     var monkey_blocks = std.mem.split(u8, content, "Monkey ");
-    var monkehs = ArrayList(Monkey).init(allocator.*);
-    defer clearOutMonkeys(&monkehs);
+    var monkehs = ArrayList(Monkey).init(allocator);
     var monkey_index: usize = 0;
-    var common_multiplier: usize = 1;
     while (monkey_blocks.next()) |monkeh_block| {
         if (monkeh_block.len == 0) continue;
-        try monkehs.append(parseMonkey(monkeh_block, allocator.*));
-        common_multiplier *= monkehs.items[monkey_index].tester.value;
+        monkehs.append(parseMonkey(monkeh_block, allocator)) catch unreachable;
         monkey_index += 1;
+    }
+    return monkehs;
+}
+
+fn determineMonkeyBusiness(monkehs: *ArrayList(Monkey), allocator: Allocator) usize {
+    var inspection_counts = allocator.alloc(usize, monkehs.items.len) catch unreachable;
+    defer allocator.free(inspection_counts);
+    for (monkehs.items) |monkeh, index| {
+        inspection_counts[index] = monkeh.inspection_count;
+    }
+    std.sort.sort(usize, inspection_counts, {}, descending);
+    return inspection_counts[0] * inspection_counts[1];
+}
+
+fn partOne(content: []const u8, allocator: Allocator) usize {
+    var monkehs = createMonkeyList(content, allocator);
+    defer clearOutMonkeys(&monkehs);
+    var round_counter: usize = 0;
+    while (round_counter < 20) : (round_counter += 1) {
+        for (monkehs.items) |*monkeh| {
+            for (monkeh.items.items) |item_value| {
+                monkeh.inspection_count += 1;
+                var new_level = monkeh.booster.boost(item_value);
+                new_level = @divFloor(new_level, 3);
+                if (monkeh.tester.doTest(new_level)) {
+                    monkehs.items[monkeh.true_index].addItem(new_level);
+                } else {
+                    monkehs.items[monkeh.false_index].addItem(new_level);
+                }
+            }
+            monkeh.items.clearRetainingCapacity();
+        }
+    }
+    return determineMonkeyBusiness(&monkehs, allocator);
+}
+
+fn partTwo(content: []const u8, allocator: Allocator) usize {
+    var monkehs = createMonkeyList(content, allocator);
+    defer clearOutMonkeys(&monkehs);
+    var common_multiplier: usize = 1;
+    for (monkehs.items) |monkeh| {
+        common_multiplier *= monkeh.tester.value;
     }
 
     var round_counter: usize = 0;
@@ -120,7 +156,6 @@ pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
             for (monkeh.items.items) |item_value| {
                 monkeh.inspection_count += 1;
                 var new_level = monkeh.booster.boost(item_value);
-                // new_level = @divFloor(new_level, 3);
                 new_level = @mod(new_level, common_multiplier);
                 if (monkeh.tester.doTest(new_level)) {
                     monkehs.items[monkeh.true_index].addItem(new_level);
@@ -131,16 +166,16 @@ pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
             monkeh.items.clearRetainingCapacity();
         }
     }
+    return determineMonkeyBusiness(&monkehs, allocator);
+}
 
-    var inspection_counts = allocator.*.alloc(usize, monkey_index) catch unreachable;
-    defer allocator.*.free(inspection_counts);
-    for (monkehs.items) |monkeh, index| {
-        inspection_counts[index] = monkeh.inspection_count;
-    }
-    std.sort.sort(usize, inspection_counts, {}, descending);
-    const monkey_business: usize = inspection_counts[0] * inspection_counts[1];
+pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
+    const content = try utils.readInputFileToBuffer(filename, allocator);
+    defer allocator.free(content);
+    const part_1 = partOne(content, allocator.*);
+    const part_2 = partTwo(content, allocator.*);
 
-    return Answer{ .part_1 = monkey_business, .part_2 = 0 };
+    return Answer{ .part_1 = part_1, .part_2 = part_2 };
 }
 
 pub fn run(allocator: *const Allocator) void {
@@ -153,6 +188,10 @@ test "day 11 worked examples" {
     var answer = try solve("day11.test", &std.testing.allocator);
     std.testing.expect(answer.part_1 == 10605) catch |err| {
         print("{d} is not 10605\n", .{answer.part_1});
+        return err;
+    };
+    std.testing.expect(answer.part_2 == 2713310158) catch |err| {
+        print("{d} is not 2713310158\n", .{answer.part_2});
         return err;
     };
 }
