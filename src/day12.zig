@@ -11,7 +11,7 @@ const Answer = utils.Answer;
 const print = std.debug.print;
 
 const START_MARKER: u8 = 'S';
-const END_MARKER: u8 = 'E';
+const SUMMIT_MARKER: u8 = 'E';
 const MAXI: usize = std.math.maxInt(usize);
 
 const Point = struct {
@@ -19,12 +19,7 @@ const Point = struct {
     column: isize,
     marker: u8,
 
-    fn printPoint(self: Point) void {
-        print("{c}@[{d},{d}]", .{ self.marker, self.row, self.column });
-    }
-
-    fn getMarkerDiff(self: Point, other: Point) usize {
-        var diff: usize = 10000;
+    fn canStepFrom(self: Point, other: Point) bool {
         var my_marker = switch(self.marker) {
             'S' => 'a',
             'E' => 'z',
@@ -35,7 +30,7 @@ const Point = struct {
             'E' => 'z',
             else => other.marker
         };
-        return if (their_marker <= my_marker + 1) 1 else diff;
+        return my_marker <= their_marker + 1;
     }
 };
 
@@ -44,18 +39,13 @@ const Map = struct {
     allocator: Allocator,
     width: usize,
     height: usize,
+    summit_index: usize,
+    lowland_indices: []usize,
     start_index: usize,
-    goal_index: usize,
 
     pub fn deinit(self: Map) void {
         self.allocator.free(self.points);
-    }
-
-    pub fn goalHeuristic(self: Map, point: Point) usize {
-        const goal_point = self.points[self.goal_index];
-        const h_dist = @intCast(usize, std.math.absInt(goal_point.column - point.column) catch unreachable);
-        const v_dist = @intCast(usize, std.math.absInt(goal_point.row - point.row) catch unreachable);
-        return h_dist + v_dist;
+        self.allocator.free(self.lowland_indices);
     }
 
     pub fn getAtCoords(self: Map, row: isize, col: isize) Point {
@@ -93,8 +83,8 @@ const AStarOpenSet = struct {
     q_map: AutoHashMap(Point, void),
     len: usize,
 
-    fn init(map: Map, f_scores: *AutoHashMap(Point, usize)) AStarOpenSet {
-        return AStarOpenSet{ .q = PriorityQueue(Point, *AutoHashMap(Point, usize), compareFScore).init(map.allocator, f_scores), .q_map = AutoHashMap(Point, void).init(map.allocator), .len = 0 };
+    fn init(map: Map, estimated_node_journey_costss: *AutoHashMap(Point, usize)) AStarOpenSet {
+        return AStarOpenSet{ .q = PriorityQueue(Point, *AutoHashMap(Point, usize), compareFScore).init(map.allocator, estimated_node_journey_costss), .q_map = AutoHashMap(Point, void).init(map.allocator), .len = 0 };
     }
     fn deinit(self: *AStarOpenSet) void {
         self.q.deinit();
@@ -117,127 +107,93 @@ const AStarOpenSet = struct {
     }
 };
 
-const NEIGHBOUR_DIRS: [4][]const u8 = .{ "NORTH", "EAST", "SOUTH", "WEST" };
+fn doAStarIsh(map: Map, target_marker: u8) !usize {
+    // Referred to as the "F score" because maths ¯\_(ツ)_/¯
+    var estimated_node_journey_costs = AutoHashMap(Point, usize).init(map.allocator);
+    defer estimated_node_journey_costs.deinit();
+    try estimated_node_journey_costs.put(map.points[map.summit_index], 0);
 
-fn doAStar(map: Map) !usize {
-    var f_score = AutoHashMap(Point, usize).init(map.allocator);
-    defer f_score.deinit();
+    // Referred to as the "open set" normally
+    var border_points_to_explore = AStarOpenSet.init(map, &estimated_node_journey_costs);
+    defer border_points_to_explore.deinit();
+    border_points_to_explore.enqueue(map.points[map.summit_index]);
 
-    var open_set = AStarOpenSet.init(map, &f_score);
-    defer open_set.deinit();
-    // The set of discovered nodes that may need to be (re-)expanded.
-    // Initially, only the start node is known.
-    // This is usually implemented as a min-heap or priority queue rather than a hash-set.
-    open_set.enqueue(map.points[map.start_index]);
+    // Referred to as the "came_from" map
+    var cheapest_path_lookback = AutoHashMap(Point, Point).init(map.allocator);
+    defer cheapest_path_lookback.deinit();
 
-    // For node n, cameFrom[n] is the node immediately preceding it on the cheapest path from start
-    // to n currently known.
-    //cameFrom := an empty map
-    var came_from = AutoHashMap(Point, Point).init(map.allocator);
-    defer came_from.deinit();
+    // Referred to as the "G score" because maths ¯\_(ツ)_/¯
+    var confirmed_node_journey_costs = AutoHashMap(Point, usize).init(map.allocator);
+    defer confirmed_node_journey_costs.deinit();
+    try confirmed_node_journey_costs.put(map.points[map.summit_index], 0);
 
-    // For node n, gScore[n] is the cost of the cheapest path from start to n currently known.
-    var g_score = AutoHashMap(Point, usize).init(map.allocator);
-    defer g_score.deinit();
-    try g_score.put(map.points[map.start_index], 0);
-
-    // For node n, fScore[n] := gScore[n] + h(n). fScore[n] represents our current best guess as to
-    // how cheap a path could be from start to finish if it goes through n.
-    //fScore := map with default value of Infinity
-    try f_score.put(map.points[map.start_index], 0);
-
-    var current: Point = undefined;
+    var current_point: Point = undefined;
     var neighbours: [4]?Point = undefined;
-    //while openSet is not empty
-    while (open_set.len > 0) {
-        // This operation can occur in O(Log(N)) time if openSet is a min-heap or a priority queue
-        // current := the node in openSet having the lowest fScore[] value
-        current = open_set.pop();
-        // print("CURRENT ", .{});
-        // current.printPoint();
-        // print("\n", .{});
+    while (border_points_to_explore.len > 0) {
+        current_point = border_points_to_explore.pop();
 
-        // if current = goal
-        //     return reconstruct_path(cameFrom, current)
-        if (current.marker == END_MARKER) {
+        if (current_point.marker == target_marker) {
             var path_length: usize = 0;
-            var step: Point = current;
-            // print("PATH!\n", .{});
-            while (came_from.contains(step)) : (path_length += 1) {
-                const next = came_from.fetchRemove(step);
+            var step: Point = current_point;
+            while (cheapest_path_lookback.contains(step)) : (path_length += 1) {
+                const next = cheapest_path_lookback.fetchRemove(step);
                 if (next) |kv| {
                     step = kv.value;
-                    // print("  ", .{});
-                    // step.printPoint();
-                    // print("\n", .{});
                 }
             }
             return path_length;
         }
 
-        // for each neighbor of current
-        neighbours = .{ map.getNorth(current), map.getEast(current), map.getSouth(current), map.getWest(current) };
+        neighbours = .{ map.getNorth(current_point), map.getEast(current_point), map.getSouth(current_point), map.getWest(current_point) };
 
         for (neighbours) |possible_neighbour| {
             if (possible_neighbour == null) continue;
             const neighbour = possible_neighbour.?;
 
-            // d(current,neighbor) is the weight of the edge from current to neighbor
-            // tentative_gScore is the distance from start to the neighbor through current
-            // tentative_gScore := gScore[current] + d(current, neighbor)
-            var tentative_g = g_score.get(current).?;
-            // Start out with a high diff to discourage paths
-            const diff: usize = current.getMarkerDiff(neighbour);
-            tentative_g += diff;
-            var neighbour_g = g_score.get(neighbour);
-            // print("    {s} ", .{NEIGHBOUR_DIRS[n_index]});
-            // neighbour.printPoint();
-            // print(" G: {?} vs {d} ({d})\n", .{ neighbour_g, tentative_g, diff});
-            // if tentative_gScore < gScore[neighbor]
-            //     // This path to neighbor is better than any previous one. Record it!
-            //     cameFrom[neighbor] := current
-            //     gScore[neighbor] := tentative_gScore
-            //     fScore[neighbor] := tentative_gScore + h(neighbor)
-            //     if neighbor not in openSet
-            //         openSet.add(neighbor)
-            if (neighbour_g == null or neighbour_g.? > tentative_g) {
-                // print("        BETTER '{c}': {?} vs {d}, F={d}\n", .{ neighbour.marker, neighbour_g, tentative_g, tentative_g + map.goalHeuristic(neighbour) });
-                try came_from.put(neighbour, current);
-                try g_score.put(neighbour, tentative_g);
-                try f_score.put(neighbour, tentative_g + map.goalHeuristic(neighbour));
-                if (!open_set.contains(neighbour)) {
-                    // print("          ENQUEUE!\n", .{});
-                    open_set.enqueue(neighbour);
+            var tentative_new_cost_to_reach_neighbour = confirmed_node_journey_costs.get(current_point).? + 1;
+
+            // Prune impassable nodes right away
+            if (!current_point.canStepFrom(neighbour)) continue;
+
+            var existing_cost_to_reach_neighbour = confirmed_node_journey_costs.get(neighbour);
+            if (existing_cost_to_reach_neighbour == null or existing_cost_to_reach_neighbour.? > tentative_new_cost_to_reach_neighbour) {
+                try cheapest_path_lookback.put(neighbour, current_point);
+                try confirmed_node_journey_costs.put(neighbour, tentative_new_cost_to_reach_neighbour);
+                try estimated_node_journey_costs.put(neighbour, tentative_new_cost_to_reach_neighbour );
+                if (!border_points_to_explore.contains(neighbour)) {
+                    border_points_to_explore.enqueue(neighbour);
                 }
             }
         }
     }
 
-    // Open set is empty but goal was never reached
-    // return failure
+    // Should never get here, so just return an error.
     return error.SolveNoWorkGood;
 }
 
 fn parseMap(input: []const u8, allocator: Allocator) Map {
     var point_list = ArrayList(Point).init(allocator);
+    var lowland_list = ArrayList(usize).init(allocator);
+    var start_index: usize = 0;
     var height: isize = 0;
     var column: isize = 0;
     var width: isize = 0;
-    var start_index: usize = 0;
-    var goal_index: usize = 0;
+    var summit_index: usize = 0;
     for (input) |char| {
         if (char == '\n') {
             if (width == 0) width = column;
             height += 1;
             column = 0;
         } else {
-            if (char == START_MARKER) start_index = point_list.items.len else if (char == END_MARKER) goal_index = point_list.items.len;
+            if (char == SUMMIT_MARKER) summit_index = point_list.items.len;
+            if (char == SUMMIT_MARKER) start_index = point_list.items.len;
+            if (char == START_MARKER or char == 'a') lowland_list.append(point_list.items.len) catch unreachable;
             point_list.append(Point{ .row = height, .column = column, .marker = char }) catch unreachable;
             column += 1;
         }
     }
 
-    return Map{ .points = point_list.toOwnedSlice() catch unreachable, .allocator = allocator, .width = std.math.cast(usize, width).?, .height = std.math.cast(usize, height).?, .start_index = start_index, .goal_index = goal_index };
+    return Map{ .points = point_list.toOwnedSlice() catch unreachable, .allocator = allocator, .width = std.math.cast(usize, width).?, .height = std.math.cast(usize, height).?, .summit_index = summit_index, .lowland_indices = lowland_list.toOwnedSlice() catch unreachable, .start_index = start_index };
 }
 
 pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
@@ -246,9 +202,8 @@ pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
 
     var map = parseMap(content, allocator.*);
     defer map.deinit();
-    // print("\n\n{s}\n\n", .{content});
-    const part_1 = try doAStar(map);
-    const part_2 = 0;
+    const part_1 = try doAStarIsh(map, 'S');
+    const part_2 = try doAStarIsh(map, 'a');
 
     return Answer{ .part_1 = part_1, .part_2 = part_2 };
 }
@@ -263,6 +218,24 @@ test "day 12 worked examples" {
     var answer = try solve("day12.test", &std.testing.allocator);
     std.testing.expect(answer.part_1 == 31) catch |err| {
         print("{d} is not 31\n", .{answer.part_1});
+        return err;
+    };
+    std.testing.expect(answer.part_2 == 29) catch |err| {
+        print("{d} is not 29\n", .{answer.part_2});
+        return err;
+    };
+}
+
+test "day 12 puzzle results" {
+    // I wanted to tidy up my code and not break the puzzle
+    // results so I put the right answers in a test
+    var answer = try solve("day12.in", &std.testing.allocator);
+    std.testing.expect(answer.part_1 == 440) catch |err| {
+        print("{d} is not 440\n", .{answer.part_1});
+        return err;
+    };
+    std.testing.expect(answer.part_2 == 439) catch |err| {
+        print("{d} is not 439\n", .{answer.part_2});
         return err;
     };
 }
