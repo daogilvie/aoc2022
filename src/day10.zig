@@ -38,10 +38,8 @@ pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
     var signal_sum: isize = 0;
     var instruction: ?[]const u8 = undefined;
 
-    // var crt_pixels: [CRT_BUF_LEN]u8 = .{'.'} ** CRT_BUF_LEN;
-    var crt_pixels: []u8 = try allocator.*.alloc(u8, CRT_BUF_LEN);
-    defer allocator.*.free(crt_pixels);
-    std.mem.set(u8, crt_pixels, '`');
+    var crt_pixels: [CRT_BUF_LEN]u8 = .{'.'} ** CRT_BUF_LEN;
+    std.mem.set(u8, &crt_pixels, '`');
     while (true) : (cycle_count += 1) {
         const cycle_signed = @intCast(isize, cycle_count);
         if (@mod(cycle_count, 40) == 20) {
