@@ -10,7 +10,6 @@ const Order = std.math.Order;
 
 const Ordering = enum { correct, wrong, unknown };
 
-
 const ListEntry = union(enum) {
     number: usize,
     list: []ListEntry,
@@ -20,9 +19,10 @@ const ListEntry = union(enum) {
             ListEntry.number => return,
             ListEntry.list => {
                 if (recurse) {
-                for (self.list) |entry| {
-                    entry.deinit(true, allocator);
-                }}
+                    for (self.list) |entry| {
+                        entry.deinit(true, allocator);
+                    }
+                }
                 allocator.free(self.list);
             },
         }
@@ -33,7 +33,7 @@ const ListEntry = union(enum) {
         switch (self) {
             .number => {
                 var slice: []ListEntry = allocator.alloc(ListEntry, 1) catch unreachable;
-                slice[0] = ListEntry {.number = self.number};
+                slice[0] = ListEntry{ .number = self.number };
                 new_entry = ListEntry{ .list = slice };
             },
             .list => {},
@@ -91,9 +91,9 @@ fn compareListEntries(left: ListEntry, right: ListEntry, allocator: Allocator) O
 }
 
 fn orderPackets(allocator: Allocator, a: ListEntry, b: ListEntry) bool {
-    return switch(compareListEntries(a, b, allocator)) {
+    return switch (compareListEntries(a, b, allocator)) {
         .correct => true,
-        else => false
+        else => false,
     };
 }
 
@@ -139,8 +139,8 @@ fn deinitPackets(packets: []ListEntry, allocator: Allocator) void {
 }
 
 fn parseStrComplete(input: []const u8, allocator: Allocator) ListEntry {
-        var context = ParserContext{ .allocator = allocator, .remaining = input};
-        return parseList(&context).?;
+    var context = ParserContext{ .allocator = allocator, .remaining = input };
+    return parseList(&context).?;
 }
 
 pub fn solve(filename: str, allocator: *const Allocator) !Answer {
@@ -155,7 +155,6 @@ pub fn solve(filename: str, allocator: *const Allocator) !Answer {
     var packets = ArrayList(ListEntry).init(allocator.*);
 
     while (lines.next()) |line| {
-
         var left = parseStrComplete(line, allocator.*);
         packets.append(left) catch unreachable;
         const right_line = lines.next().?;
@@ -186,14 +185,13 @@ pub fn solve(filename: str, allocator: *const Allocator) !Answer {
                         .list => continue,
                         .number => |value| {
                             if (value == 2 or value == 6) part_2 *= index + 1;
-                        }
+                        },
                     }
                 },
-                else => continue
+                else => continue,
             }
         }
     }
-
 
     return Answer{ .part_1 = part_1, .part_2 = part_2 };
 }
