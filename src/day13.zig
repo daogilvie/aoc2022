@@ -10,28 +10,29 @@ const Order = std.math.Order;
 
 const Ordering = enum { correct, wrong, unknown };
 
+
 const ListEntry = union(enum) {
     number: usize,
     list: []ListEntry,
 
-    fn deinit(self: ListEntry, recurse: bool, context: *ParserContext) void {
+    fn deinit(self: ListEntry, recurse: bool, allocator: Allocator) void {
         switch (self) {
             ListEntry.number => return,
             ListEntry.list => {
                 if (recurse) {
                 for (self.list) |entry| {
-                    entry.deinit(true, context);
+                    entry.deinit(true, allocator);
                 }}
-                context.allocator.free(self.list);
+                allocator.free(self.list);
             },
         }
     }
 
-    fn getAsList(self: ListEntry, context: *ParserContext) ListEntry {
+    fn getAsList(self: ListEntry, allocator: Allocator) ListEntry {
         var new_entry = self;
         switch (self) {
             .number => {
-                var slice: []ListEntry = context.allocator.alloc(ListEntry, 1) catch unreachable;
+                var slice: []ListEntry = allocator.alloc(ListEntry, 1) catch unreachable;
                 slice[0] = ListEntry {.number = self.number};
                 new_entry = ListEntry{ .list = slice };
             },
@@ -50,7 +51,7 @@ fn isNumberEntry(entry: ListEntry) bool {
     };
 }
 
-fn compareListEntries(left: ListEntry, right: ListEntry, context: *ParserContext) Ordering {
+fn compareListEntries(left: ListEntry, right: ListEntry, allocator: Allocator) Ordering {
     // Case 1: Both Numbers
     if (isNumberEntry(left) and isNumberEntry(right)) {
         return if (left.number < right.number)
@@ -58,14 +59,14 @@ fn compareListEntries(left: ListEntry, right: ListEntry, context: *ParserContext
         else if (left.number > right.number) Ordering.wrong else Ordering.unknown;
     } else if (isNumberEntry(left)) {
         // Make fake list for left
-        var fake_left = left.getAsList(context);
-        defer fake_left.deinit(false, context);
-        return compareListEntries(fake_left, right, context);
+        var fake_left = left.getAsList(allocator);
+        defer fake_left.deinit(false, allocator);
+        return compareListEntries(fake_left, right, allocator);
     } else if (isNumberEntry(right)) {
         // Make fake list for right
-        var fake_right = right.getAsList(context);
-        defer fake_right.deinit(false, context);
-        return compareListEntries(left, fake_right, context);
+        var fake_right = right.getAsList(allocator);
+        defer fake_right.deinit(false, allocator);
+        return compareListEntries(left, fake_right, allocator);
     } else {
         // Both are list types
         var current_comparison = Ordering.unknown;
@@ -82,11 +83,18 @@ fn compareListEntries(left: ListEntry, right: ListEntry, context: *ParserContext
             } else if (index >= left_len) {
                 current_comparison = Ordering.correct;
             } else {
-                current_comparison = compareListEntries(left.list[index], right.list[index], context);
+                current_comparison = compareListEntries(left.list[index], right.list[index], allocator);
             }
         }
         return current_comparison;
     }
+}
+
+fn orderPackets(allocator: Allocator, a: ListEntry, b: ListEntry) bool {
+    return switch(compareListEntries(a, b, allocator)) {
+        .correct => true,
+        else => false
+    };
 }
 
 // Parse a number up to the next , or ]
@@ -123,32 +131,69 @@ fn parseList(context: *ParserContext) ?ListEntry {
     return ListEntry{ .list = entries.toOwnedSlice() catch unreachable };
 }
 
+fn deinitPackets(packets: []ListEntry, allocator: Allocator) void {
+    for (packets) |packet| {
+        packet.deinit(true, allocator);
+    }
+    allocator.free(packets);
+}
+
+fn parseStrComplete(input: []const u8, allocator: Allocator) ListEntry {
+        var context = ParserContext{ .allocator = allocator, .remaining = input};
+        return parseList(&context).?;
+}
+
 pub fn solve(filename: str, allocator: *const Allocator) !Answer {
     const content = try utils.readInputFileToBuffer(filename, allocator);
     defer allocator.free(content);
 
     var pair_index: usize = 1;
     var part_1: usize = 0;
-    const part_2 = 0;
 
     var lines = std.mem.tokenize(u8, content, "\n");
 
+    var packets = ArrayList(ListEntry).init(allocator.*);
+
     while (lines.next()) |line| {
-        var left_context = ParserContext{ .allocator = allocator.*, .remaining = line, .pair_index = pair_index };
-        var left = parseList(&left_context).?;
-        defer left.deinit(true, &left_context);
+
+        var left = parseStrComplete(line, allocator.*);
+        packets.append(left) catch unreachable;
         const right_line = lines.next().?;
-        var right_context = ParserContext{ .allocator = allocator.*, .remaining = right_line, .pair_index = pair_index };
-        var right = parseList(&right_context).?;
-        defer right.deinit(true, &right_context);
+        var right = parseStrComplete(right_line, allocator.*);
+        packets.append(right) catch unreachable;
 
         // Are these correct?
-        if (compareListEntries(left, right, &right_context) == Ordering.correct) {
+        if (compareListEntries(left, right, allocator.*) == Ordering.correct) {
             part_1 += pair_index;
         }
 
         pair_index += 1;
     }
+
+    // Inject divider packet
+    packets.append(parseStrComplete("[[2]]", allocator.*)) catch unreachable;
+    packets.append(parseStrComplete("[[6]]", allocator.*)) catch unreachable;
+    var sortable = packets.toOwnedSlice() catch unreachable;
+    defer deinitPackets(sortable, allocator.*);
+    std.sort.sort(ListEntry, sortable, allocator.*, orderPackets);
+    var part_2: usize = 1;
+    for (sortable) |entry, index| {
+        if (entry.list.len == 1) {
+            switch (entry.list[0]) {
+                .list => |inner_list| {
+                    if (inner_list.len != 1) continue;
+                    switch (inner_list[0]) {
+                        .list => continue,
+                        .number => |value| {
+                            if (value == 2 or value == 6) part_2 *= index + 1;
+                        }
+                    }
+                },
+                else => continue
+            }
+        }
+    }
+
 
     return Answer{ .part_1 = part_1, .part_2 = part_2 };
 }
@@ -163,6 +208,10 @@ test "day 13 worked examples" {
     var answer = try solve("day13.test", &std.testing.allocator);
     std.testing.expect(answer.part_1 == 13) catch |err| {
         print("{d} is not 13\n", .{answer.part_1});
+        return err;
+    };
+    std.testing.expect(answer.part_2 == 140) catch |err| {
+        print("{d} is not 140\n", .{answer.part_2});
         return err;
     };
 }
