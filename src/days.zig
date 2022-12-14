@@ -1,17 +1,28 @@
 const std = @import("std");
 const utils = @import("utils.zig");
-const day1 = @import("day1.zig");
-const day2 = @import("day2.zig");
-const day3 = @import("day3.zig");
-const day4 = @import("day4.zig");
-const day5 = @import("day5.zig");
-const day6 = @import("day6.zig");
-const day7 = @import("day7.zig");
-const day8 = @import("day8.zig");
-const day9 = @import("day9.zig");
-const day10 = @import("day10.zig");
-const day11 = @import("day11.zig");
-const day12 = @import("day12.zig");
-const day13 = @import("day13.zig");
 
-pub const days = [_]*const fn (*const std.mem.Allocator) void { day1.run, day2.run, day3.run, day4.run, day5.run, day6.run, day7.run, day8.run, day9.run, day10.run, day11.run, day12.run, day13.run };
+const day_structs = .{
+    @import("day1.zig"),
+    @import("day2.zig"),
+    @import("day3.zig"),
+    @import("day4.zig"),
+    @import("day5.zig"),
+    @import("day6.zig"),
+    @import("day7.zig"),
+    @import("day8.zig"),
+    @import("day9.zig"),
+    @import("day10.zig"),
+    @import("day11.zig"),
+    @import("day12.zig"),
+    @import("day13.zig"),
+    @import("day14.zig"),
+};
+
+pub const days = daygen: {
+    const num_days = day_structs.len;
+    var day_dyn: [num_days]*const (fn (*const std.mem.Allocator) void) = .{undefined} ** num_days;
+    for (day_structs) |day, ind| {
+        day_dyn[ind] = day.run;
+    }
+    break :daygen day_dyn;
+};
