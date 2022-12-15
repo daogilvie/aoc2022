@@ -1,14 +1,16 @@
 const std = @import("std");
 const utils = @import("utils.zig");
+
+const Allocator = std.mem.Allocator;
 const Answer = utils.Answer;
 
 const descending = std.sort.desc(usize);
 
-fn solve(filename: []const u8, allocator: *const std.mem.Allocator) !Answer {
+fn solve(filename: []const u8, allocator: Allocator) !Answer {
     const contents = try utils.readInputFileToBuffer(filename, allocator);
     defer allocator.free(contents);
 
-    var calorie_list = std.ArrayList(usize).init(allocator.*);
+    var calorie_list = std.ArrayList(usize).init(allocator);
     defer calorie_list.deinit();
 
     var elf_chunks = std.mem.split(u8, contents, "\n\n");
@@ -32,14 +34,14 @@ fn solve(filename: []const u8, allocator: *const std.mem.Allocator) !Answer {
     return Answer{ .part_1 = sorted[0], .part_2 = sorted[0] + sorted[1] + sorted[2] };
 }
 
-pub fn run(allocator: *const std.mem.Allocator) void {
+pub fn run(allocator: Allocator) void {
     utils.printHeader("Day 1");
     const answer = solve("day1.in", allocator) catch unreachable;
     answer.print();
 }
 
 test "day 1 worked example" {
-    const solution = try solve("day1.test", &std.testing.allocator);
+    const solution = try solve("day1.test", std.testing.allocator);
     try std.testing.expect(solution.part_1 == 24000);
     try std.testing.expect(solution.part_2 == 45000);
 }

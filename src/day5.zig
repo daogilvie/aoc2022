@@ -48,10 +48,10 @@ const BunchOfStacks = struct {
     }
 };
 
-fn parseStartingStacks(input: []const u8, allocator: *const Allocator) !BunchOfStacks {
+fn parseStartingStacks(input: []const u8, allocator: Allocator) !BunchOfStacks {
     var stack_lines_reordered = std.mem.splitBackwards(u8, input, "\n");
     var stack_defs = std.mem.tokenize(u8, stack_lines_reordered.next().?, " ");
-    var bunch_of_stacks = BunchOfStacks.init(allocator.*);
+    var bunch_of_stacks = BunchOfStacks.init(allocator);
     while (stack_defs.next()) |_| {
         try bunch_of_stacks.addStack();
     }
@@ -67,7 +67,7 @@ fn parseStartingStacks(input: []const u8, allocator: *const Allocator) !BunchOfS
     return bunch_of_stacks;
 }
 
-pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
+pub fn solve(filename: []const u8, allocator: Allocator) !Answer {
     const contents = try utils.readInputFileToBuffer(filename, allocator);
     defer allocator.free(contents);
 
@@ -104,10 +104,10 @@ pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
         try stacks_part2.moveCrates(amount, source, dest);
     }
 
-    return Answer{ .part_1 = stacks_part1.getTopRow(), .part_2 = stacks_part2.getTopRow(), .allocator = allocator.* };
+    return Answer{ .part_1 = stacks_part1.getTopRow(), .part_2 = stacks_part2.getTopRow(), .allocator = allocator };
 }
 
-pub fn run(allocator: *const Allocator) void {
+pub fn run(allocator: Allocator) void {
     utils.printHeader("Day 5");
     var answer = solve("day5.in", allocator) catch unreachable;
     defer answer.deinit();
@@ -115,7 +115,7 @@ pub fn run(allocator: *const Allocator) void {
 }
 
 test "day 5 worked example" {
-    var answer = try solve("day5.test", &std.testing.allocator);
+    var answer = try solve("day5.test", std.testing.allocator);
     defer answer.deinit();
     std.testing.expect(std.mem.eql(u8, answer.part_1, "CMZ")) catch |err| {
         print("\"{s}\" is not \"CMZ\"\n", .{answer.part_1});

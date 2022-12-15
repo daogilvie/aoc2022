@@ -169,23 +169,23 @@ fn partTwo(content: []const u8, allocator: Allocator) usize {
     return determineMonkeyBusiness(&monkehs, allocator);
 }
 
-pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
+pub fn solve(filename: []const u8, allocator: Allocator) !Answer {
     const content = try utils.readInputFileToBuffer(filename, allocator);
     defer allocator.free(content);
-    const part_1 = partOne(content, allocator.*);
-    const part_2 = partTwo(content, allocator.*);
+    const part_1 = partOne(content, allocator);
+    const part_2 = partTwo(content, allocator);
 
     return Answer{ .part_1 = part_1, .part_2 = part_2 };
 }
 
-pub fn run(allocator: *const Allocator) void {
+pub fn run(allocator: Allocator) void {
     utils.printHeader("Day 11");
     var answer = solve("day11.in", allocator) catch unreachable;
     answer.print();
 }
 
 test "day 11 worked examples" {
-    var answer = try solve("day11.test", &std.testing.allocator);
+    var answer = try solve("day11.test", std.testing.allocator);
     std.testing.expect(answer.part_1 == 10605) catch |err| {
         print("{d} is not 10605\n", .{answer.part_1});
         return err;

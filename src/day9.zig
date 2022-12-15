@@ -65,14 +65,14 @@ const Position = struct {
 
 const PositionSet = std.AutoHashMap(Position, void);
 
-pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
+pub fn solve(filename: []const u8, allocator: Allocator) !Answer {
     const content = try utils.readInputFileToBuffer(filename, allocator);
     defer allocator.free(content);
 
     var knot_positions: [10]Position = .{Position{}} ** 10;
 
-    var tail_positions = PositionSet.init(allocator.*);
-    var second_positions = PositionSet.init(allocator.*);
+    var tail_positions = PositionSet.init(allocator);
+    var second_positions = PositionSet.init(allocator);
     defer tail_positions.deinit();
     defer second_positions.deinit();
 
@@ -105,14 +105,14 @@ pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
     return Answer{ .part_1 = second_positions.count(), .part_2 = tail_positions.count() };
 }
 
-pub fn run(allocator: *const Allocator) void {
+pub fn run(allocator: Allocator) void {
     utils.printHeader("Day 9");
     var answer = solve("day9.in", allocator) catch unreachable;
     answer.print();
 }
 
 test "day 9 worked examples" {
-    var answer = try solve("day9.test", &std.testing.allocator);
+    var answer = try solve("day9.test", std.testing.allocator);
     std.testing.expect(answer.part_1 == 13) catch |err| {
         print("{d} is not 13\n", .{answer.part_1});
         return err;
@@ -121,7 +121,7 @@ test "day 9 worked examples" {
         print("{d} is not 1\n", .{answer.part_2});
         return err;
     };
-    answer = try solve("day9_part2.test", &std.testing.allocator);
+    answer = try solve("day9_part2.test", std.testing.allocator);
     std.testing.expect(answer.part_2 == 36) catch |err| {
         print("{d} is not 36\n", .{answer.part_2});
         return err;

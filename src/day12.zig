@@ -196,11 +196,11 @@ fn parseMap(input: []const u8, allocator: Allocator) Map {
     return Map{ .points = point_list.toOwnedSlice() catch unreachable, .allocator = allocator, .width = std.math.cast(usize, width).?, .height = std.math.cast(usize, height).?, .summit_index = summit_index, .lowland_indices = lowland_list.toOwnedSlice() catch unreachable, .start_index = start_index };
 }
 
-pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
+pub fn solve(filename: []const u8, allocator: Allocator) !Answer {
     const content = try utils.readInputFileToBuffer(filename, allocator);
     defer allocator.free(content);
 
-    var map = parseMap(content, allocator.*);
+    var map = parseMap(content, allocator);
     defer map.deinit();
     const part_1 = try doAStarIsh(map, 'S');
     const part_2 = try doAStarIsh(map, 'a');
@@ -208,14 +208,14 @@ pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
     return Answer{ .part_1 = part_1, .part_2 = part_2 };
 }
 
-pub fn run(allocator: *const Allocator) void {
+pub fn run(allocator: Allocator) void {
     utils.printHeader("Day 12");
     var answer = solve("day12.in", allocator) catch unreachable;
     answer.print();
 }
 
 test "day 12 worked examples" {
-    var answer = try solve("day12.test", &std.testing.allocator);
+    var answer = try solve("day12.test", std.testing.allocator);
     std.testing.expect(answer.part_1 == 31) catch |err| {
         print("{d} is not 31\n", .{answer.part_1});
         return err;
@@ -229,7 +229,7 @@ test "day 12 worked examples" {
 test "day 12 puzzle results" {
     // I wanted to tidy up my code and not break the puzzle
     // results so I put the right answers in a test
-    var answer = try solve("day12.in", &std.testing.allocator);
+    var answer = try solve("day12.in", std.testing.allocator);
     std.testing.expect(answer.part_1 == 440) catch |err| {
         print("{d} is not 440\n", .{answer.part_1});
         return err;

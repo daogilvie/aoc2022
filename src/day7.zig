@@ -45,7 +45,7 @@ fn clearDirStack(dir_stack: ArrayList([]u8), allocator: Allocator) void {
     dir_stack.deinit();
 }
 
-pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
+pub fn solve(filename: []const u8, allocator: Allocator) !Answer {
     const contents = try utils.readInputFileToBuffer(filename, allocator);
     defer allocator.free(contents);
 
@@ -53,10 +53,10 @@ pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
 
     // Make a map to store directory sizes as fully qualified paths —
     // just in case there are any sub dirs with the same name knocking about.
-    var dir_size_map = std.StringArrayHashMap(usize).init(allocator.*);
+    var dir_size_map = std.StringArrayHashMap(usize).init(allocator);
     defer dir_size_map.deinit();
-    var dir_stack = ArrayList([]u8).init(allocator.*);
-    defer clearDirStack(dir_stack, allocator.*);
+    var dir_stack = ArrayList([]u8).init(allocator);
+    defer clearDirStack(dir_stack, allocator);
     var full_sum: usize = 0;
     while (lines.next()) |line| {
         if (std.mem.eql(u8, line, "$ ls")) {
@@ -74,7 +74,7 @@ pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
                 allocator.free(item);
             } else {
                 // ASSUMPTION: A cd line like this is descending into a new dir
-                try dir_stack.append(makePrefixedName(dir_stack, line[5..], allocator.*));
+                try dir_stack.append(makePrefixedName(dir_stack, line[5..], allocator));
             }
         } else if (!std.mem.startsWith(u8, line, "dir")) {
             var parts = std.mem.tokenize(u8, line, " ");
@@ -96,7 +96,7 @@ pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
 
     var values: []usize = dir_size_map.values();
     std.sort.sort(usize, values, {}, ascending);
-    
+
     var part_1_answer: usize = 0;
     {
         var index: usize = 1;
@@ -116,14 +116,14 @@ pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
     return Answer{ .part_1 = part_1_answer, .part_2 = part_2_answer };
 }
 
-pub fn run(allocator: *const Allocator) void {
+pub fn run(allocator: Allocator) void {
     utils.printHeader("Day 7");
     var answer = solve("day7.in", allocator) catch unreachable;
     answer.print();
 }
 
 test "day 7 worked example" {
-    var answer = try solve("day7.test", &std.testing.allocator);
+    var answer = try solve("day7.test", std.testing.allocator);
     std.testing.expect(answer.part_1 == 95437) catch |err| {
         print("{d} is not 95437\n", .{answer.part_1});
         return err;

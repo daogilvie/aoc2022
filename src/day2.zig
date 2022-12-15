@@ -45,7 +45,7 @@ fn calculateScoreTwo(opponent_move: OpposingMove, suggestion: GuideSuggestion) u
     };
 }
 
-fn solve(filename: []const u8, allocator: *const std.mem.Allocator) !Answer {
+fn solve(filename: []const u8, allocator: std.mem.Allocator) !Answer {
     const contents = try utils.readInputFileToBuffer(filename, allocator);
     defer allocator.free(contents);
 
@@ -63,14 +63,14 @@ fn solve(filename: []const u8, allocator: *const std.mem.Allocator) !Answer {
     return Answer{ .part_1 = score_one, .part_2 = score_two };
 }
 
-pub fn run(allocator: *const std.mem.Allocator) void {
+pub fn run(allocator: std.mem.Allocator) void {
     utils.printHeader("Day 2");
     const answer = solve("day2.in", allocator) catch unreachable;
     answer.print();
 }
 
 test "day 2 worked example" {
-    const solution = try solve("day2.test", &std.testing.allocator);
+    const solution = try solve("day2.test", std.testing.allocator);
     try std.testing.expect(solution.part_1 == 15);
     try std.testing.expect(solution.part_2 == 12);
 }

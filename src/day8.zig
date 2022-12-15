@@ -132,11 +132,11 @@ const Grove = struct {
     }
 };
 
-pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
+pub fn solve(filename: []const u8, allocator: Allocator) !Answer {
     const content = try utils.readInputFileToBuffer(filename, allocator);
     defer allocator.free(content);
 
-    var grove = try Grove.init(content, allocator.*);
+    var grove = try Grove.init(content, allocator);
     defer grove.deinit();
 
     grove.calculateSightlines();
@@ -163,14 +163,14 @@ pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
     return Answer{ .part_1 = part_1, .part_2 = part_2 };
 }
 
-pub fn run(allocator: *const Allocator) void {
+pub fn run(allocator: Allocator) void {
     utils.printHeader("Day 8");
     var answer = solve("day8.in", allocator) catch unreachable;
     answer.print();
 }
 
 test "day 8 worked example" {
-    var answer = try solve("day8.test", &std.testing.allocator);
+    var answer = try solve("day8.test", std.testing.allocator);
     std.testing.expect(answer.part_1 == 21) catch |err| {
         print("{d} is not 21\n", .{answer.part_1});
         return err;

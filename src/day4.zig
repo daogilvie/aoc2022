@@ -4,6 +4,7 @@ const utils = @import("utils.zig");
 const str = []const u8;
 
 const Answer = utils.Answer;
+const Allocator = std.mem.Allocator;
 
 const Assignment = struct {
     lower: usize,
@@ -26,7 +27,7 @@ const Assignment = struct {
     }
 };
 
-fn solve(filename: []const u8, allocator: *const std.mem.Allocator) !Answer {
+fn solve(filename: []const u8, allocator: Allocator) !Answer {
     const contents = try utils.readInputFileToBuffer(filename, allocator);
     defer allocator.free(contents);
 
@@ -49,7 +50,7 @@ fn solve(filename: []const u8, allocator: *const std.mem.Allocator) !Answer {
     return Answer{ .part_1 = containments, .part_2 = overlaps };
 }
 
-pub fn run(allocator: *const std.mem.Allocator) void {
+pub fn run(allocator: Allocator) void {
     utils.printHeader("Day 4");
     const answer = solve("day4.in", allocator) catch unreachable;
     answer.print();
@@ -81,7 +82,7 @@ test "day 4 assignment overlaps" {
 }
 
 test "day 4 worked example" {
-    const solution = try solve("day4.test", &std.testing.allocator);
+    const solution = try solve("day4.test", std.testing.allocator);
     std.testing.expect(solution.part_1 == 2) catch |err| {
         std.debug.print("{d} is not 2\n", .{solution.part_1});
         return err;

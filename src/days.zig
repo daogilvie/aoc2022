@@ -20,7 +20,7 @@ const day_structs = .{
 
 pub const days = daygen: {
     const num_days = day_structs.len;
-    var day_dyn: [num_days]*const (fn (*const std.mem.Allocator) void) = .{undefined} ** num_days;
+    var day_dyn: [num_days]*const (fn (std.mem.Allocator) void) = .{undefined} ** num_days;
     for (day_structs) |day, ind| {
         day_dyn[ind] = day.run;
     }

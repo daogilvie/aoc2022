@@ -28,7 +28,7 @@ pub fn closeEnough(target: isize, value: isize) bool {
     return std.math.absInt(target - value) catch unreachable < 2;
 }
 
-pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
+pub fn solve(filename: []const u8, allocator: Allocator) !Answer {
     const content = try utils.readInputFileToBuffer(filename, allocator);
     defer allocator.free(content);
     var instructions = std.mem.tokenize(u8, content, " \n");
@@ -67,7 +67,7 @@ pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
 
     // Convert pixels to rows for easy display/comparison
     // First real use of comptime to unroll a loop. A toy use, but interesting.
-    var crt_screen: []u8 = try allocator.*.alloc(u8, CRT_BUF_LEN + 5);
+    var crt_screen: []u8 = try allocator.alloc(u8, CRT_BUF_LEN + 5);
     comptime var index: usize = 0;
     comptime var start = index * 40;
     comptime var end = start + 40;
@@ -81,10 +81,10 @@ pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
     end = start + 40;
     std.mem.copy(u8, crt_screen[start + index .. end + index], crt_pixels[start..end]);
 
-    return Answer{ .part_1 = signal_sum, .part_2 = crt_screen, .allocator = allocator.* };
+    return Answer{ .part_1 = signal_sum, .part_2 = crt_screen, .allocator = allocator };
 }
 
-pub fn run(allocator: *const Allocator) void {
+pub fn run(allocator: Allocator) void {
     utils.printHeader("Day 10");
     var answer = solve("day10.in", allocator) catch unreachable;
     defer answer.deinit();
@@ -92,7 +92,7 @@ pub fn run(allocator: *const Allocator) void {
 }
 
 test "day 10 worked examples" {
-    var answer = try solve("day10.test", &std.testing.allocator);
+    var answer = try solve("day10.test", std.testing.allocator);
     defer answer.deinit();
     std.testing.expect(answer.part_1 == 13140) catch |err| {
         print("{d} is not 13140\n", .{answer.part_1});

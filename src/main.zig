@@ -8,7 +8,7 @@ pub fn main() !void {
         _ = gpa.deinit();
     }
     for (days.days) |day_fn| {
-        day_fn(&allocator);
+        day_fn(allocator);
     }
 }
 

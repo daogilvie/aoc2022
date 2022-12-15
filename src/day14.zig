@@ -193,15 +193,15 @@ const Grid = struct {
     }
 };
 
-pub fn solve(filename: str, allocator: *const Allocator) !Answer {
+pub fn solve(filename: str, allocator: Allocator) !Answer {
     const content = try utils.readInputFileToBuffer(filename, allocator);
     defer allocator.free(content);
     var lines = std.mem.tokenize(u8, content, "\n");
 
-    var lines_list = ArrayList([]Point).init(allocator.*);
+    var lines_list = ArrayList([]Point).init(allocator);
     defer {
         for (lines_list.items) |point_slice| {
-            allocator.*.free(point_slice);
+            allocator.free(point_slice);
         }
         lines_list.deinit();
     }
@@ -212,7 +212,7 @@ pub fn solve(filename: str, allocator: *const Allocator) !Answer {
     var max_y: usize = 0;
 
     while (lines.next()) |rock_path_definition| {
-        var point_list = ArrayList(Point).init(allocator.*);
+        var point_list = ArrayList(Point).init(allocator);
         var point_defs = std.mem.split(u8, rock_path_definition, " -> ");
         while (point_defs.next()) |point_def| {
             const point = Point.fromStr(point_def);
@@ -225,7 +225,7 @@ pub fn solve(filename: str, allocator: *const Allocator) !Answer {
         lines_list.append(point_list.toOwnedSlice() catch unreachable) catch unreachable;
     }
 
-    var grid = Grid.init(Point{ .x = min_x, .y = 0 }, Point{ .x = max_x, .y = max_y }, allocator.*);
+    var grid = Grid.init(Point{ .x = min_x, .y = 0 }, Point{ .x = max_x, .y = max_y }, allocator);
     grid.addRocks(lines_list);
 
     var sand_destination: ?Point = Point{ .x = SAND_SOURCE_COLUMN, .y = 0 };
@@ -257,7 +257,7 @@ pub fn solve(filename: str, allocator: *const Allocator) !Answer {
     // required when hitting the "edge" of the grid, so there is no need to expand
     // the simulation any further even though the space is now unbounded.
     grid.deinit();
-    grid = Grid.init(Point{ .x = min_x-2, .y = 0 }, Point{ .x = max_x+2, .y = max_y }, allocator.*);
+    grid = Grid.init(Point{ .x = min_x-2, .y = 0 }, Point{ .x = max_x+2, .y = max_y }, allocator);
     grid.addFloor();
     defer grid.deinit();
     grid.addRocks(lines_list);
@@ -283,14 +283,14 @@ pub fn solve(filename: str, allocator: *const Allocator) !Answer {
     return Answer{ .part_1 = part_1, .part_2 = grid.grain_counter };
 }
 
-pub fn run(allocator: *const Allocator) void {
+pub fn run(allocator: Allocator) void {
     utils.printHeader("Day 14");
     var answer = solve("day14.in", allocator) catch unreachable;
     answer.print();
 }
 
 test "day 14 worked examples" {
-    var answer = try solve("day14.test", &std.testing.allocator);
+    var answer = try solve("day14.test", std.testing.allocator);
     std.testing.expect(answer.part_1 == 24) catch |err| {
         print("{d} is not 24\n", .{answer.part_1});
         return err;

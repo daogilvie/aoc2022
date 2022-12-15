@@ -1,6 +1,7 @@
 const std = @import("std");
 const utils = @import("utils.zig");
 
+const Allocator = std.mem.Allocator;
 const Answer = utils.Answer;
 
 const descending = std.sort.desc(u8);
@@ -71,7 +72,7 @@ fn itemiseRucksackAndFindDuplicate(rucksack_contents: []const u8, elf_trio_item_
     return duplicate;
 }
 
-fn solve(filename: []const u8, allocator: *const std.mem.Allocator) !Answer {
+fn solve(filename: []const u8, allocator: Allocator) !Answer {
     const contents = try utils.readInputFileToBuffer(filename, allocator);
     defer allocator.free(contents);
 
@@ -112,7 +113,7 @@ fn solve(filename: []const u8, allocator: *const std.mem.Allocator) !Answer {
     return Answer{ .part_1 = part_1_priority_sum, .part_2 = part_2_badge_sum };
 }
 
-pub fn run(allocator: *const std.mem.Allocator) void {
+pub fn run(allocator: Allocator) void {
     utils.printHeader("Day 3");
     const answer = solve("day3.in", allocator) catch unreachable;
     answer.print();
@@ -128,7 +129,7 @@ test "day 3 priority cast" {
 }
 
 test "day 3 rucksack duplicate checker" {
-    const contents = try utils.readInputFileToBuffer("day3.test", &std.testing.allocator);
+    const contents = try utils.readInputFileToBuffer("day3.test", std.testing.allocator);
     defer std.testing.allocator.free(contents);
     var map = ItemMap.init();
 
@@ -149,7 +150,7 @@ test "day 3 rucksack duplicate checker" {
 }
 
 test "day 3 worked example" {
-    const solution = try solve("day3.test", &std.testing.allocator);
+    const solution = try solve("day3.test", std.testing.allocator);
     std.testing.expect(solution.part_1 == 157) catch |err| {
         std.debug.print("{d} is not 157\n", .{solution.part_1});
         return err;

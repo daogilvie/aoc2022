@@ -1,9 +1,9 @@
 const std = @import("std");
 
-pub fn readInputFileToBuffer(name: []const u8, allocator: *const std.mem.Allocator) ![]u8 {
-    const fullpath = try std.fs.path.join(allocator.*, &.{ "inputs", name });
+pub fn readInputFileToBuffer(name: []const u8, allocator: std.mem.Allocator) ![]u8 {
+    const fullpath = try std.fs.path.join(allocator, &.{ "inputs", name });
     defer allocator.free(fullpath);
-    return try std.fs.cwd().readFileAlloc(allocator.*, fullpath, 1000000);
+    return try std.fs.cwd().readFileAlloc(allocator, fullpath, 1000000);
 }
 
 // Surely this is longer than will ever be needed for headers.

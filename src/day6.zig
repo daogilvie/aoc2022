@@ -47,21 +47,21 @@ fn slideWindowToFindMarker(haystack: []const u8, window_size: usize) usize {
     } else 0;
 }
 
-pub fn solve(filename: []const u8, allocator: *const Allocator) !Answer {
+pub fn solve(filename: []const u8, allocator: Allocator) !Answer {
     const contents = try utils.readInputFileToBuffer(filename, allocator);
     defer allocator.free(contents);
 
     return Answer{ .part_1 = slideWindowToFindMarker(contents, PART_1_WINDOW_LENGTH), .part_2 = slideWindowToFindMarker(contents, PART_2_WINDOW_LENGTH) };
 }
 
-pub fn run(allocator: *const Allocator) void {
+pub fn run(allocator: Allocator) void {
     utils.printHeader("Day 6");
     var answer = solve("day6.in", allocator) catch unreachable;
     answer.print();
 }
 
 test "day 6 worked example" {
-    var answer = try solve("day6.test", &std.testing.allocator);
+    var answer = try solve("day6.test", std.testing.allocator);
     std.testing.expect(answer.part_1 == 7) catch |err| {
         print("{d} is not 7\n", .{answer.part_1});
         return err;
