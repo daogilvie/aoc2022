@@ -69,42 +69,7 @@ const Point = struct {
     }
 };
 
-pub fn solve(filename: str, allocator: Allocator, target_y: isize, search_bound: isize) !Answer {
-    const content = try utils.readInputFileToBuffer(filename, allocator);
-    defer allocator.free(content);
-    var lines = std.mem.tokenize(u8, content, "\n");
-
-    var sensors = ArrayList(Point).init(allocator);
-    defer sensors.deinit();
-    var beacons = ArrayList(Point).init(allocator);
-    defer beacons.deinit();
-
-    var beacon_set = std.AutoHashMap(Point, void).init(allocator);
-    defer beacon_set.deinit();
-
-    var target_beacons = std.ArrayList(Point).init(allocator);
-    defer target_beacons.deinit();
-
-    var min_x: isize = std.math.maxInt(isize);
-    var max_x: isize = std.math.minInt(isize);
-    var min_y: isize = std.math.maxInt(isize);
-    var max_y: isize = std.math.minInt(isize);
-    while (lines.next()) |line| {
-        const col_pos = std.mem.indexOfScalar(u8, line, ':').?;
-        const sensor = Point.fromStr(line[10..col_pos]);
-        sensors.append(sensor) catch unreachable;
-        const beacon = Point.fromStr(line[col_pos + 23 ..]);
-        beacons.append(beacon) catch unreachable;
-        // Store beacons on the target line for later convenience
-        if (beacon.y == target_y and !beacon_set.contains(beacon)) {
-            target_beacons.append(beacon) catch unreachable;
-        }
-        beacon_set.put(beacon, {}) catch unreachable;
-        min_x = std.math.min(std.math.min(sensor.x, beacon.x), min_x);
-        max_x = std.math.max(std.math.max(sensor.x, beacon.x), max_x);
-        min_y = std.math.min(std.math.min(sensor.y, beacon.y), min_y);
-        max_y = std.math.max(std.math.max(sensor.y, beacon.y), max_y);
-    }
+fn generateSegmentsForLine(target_y: isize, sensors: ArrayList(Point), beacons: ArrayList(Point), allocator: Allocator) ArrayList(Segment) {
     var segments = ArrayList(Segment).init(allocator);
     for (sensors.items) |sensor, index| {
         const beacon = beacons.items[index];
@@ -138,20 +103,67 @@ pub fn solve(filename: str, allocator: Allocator, target_y: isize, search_bound:
         allocator.free(sorted_slice);
     }
 
+
+    return segments;
+}
+
+pub fn solve(filename: str, allocator: Allocator, target_y: isize, search_bound: isize) !Answer {
+    const content = try utils.readInputFileToBuffer(filename, allocator);
+    defer allocator.free(content);
+    var lines = std.mem.tokenize(u8, content, "\n");
+
+    var sensors = ArrayList(Point).init(allocator);
+    defer sensors.deinit();
+    var beacons = ArrayList(Point).init(allocator);
+    defer beacons.deinit();
+
+    var beacon_set = std.AutoHashMap(Point, void).init(allocator);
+    defer beacon_set.deinit();
+
+    var unique_beacons = ArrayList(Point).init(allocator);
+    defer unique_beacons.deinit();
+
+    var min_x: isize = std.math.maxInt(isize);
+    var max_x: isize = std.math.minInt(isize);
+    var min_y: isize = std.math.maxInt(isize);
+    var max_y: isize = std.math.minInt(isize);
+    while (lines.next()) |line| {
+        const col_pos = std.mem.indexOfScalar(u8, line, ':').?;
+        const sensor = Point.fromStr(line[10..col_pos]);
+        sensors.append(sensor) catch unreachable;
+        const beacon = Point.fromStr(line[col_pos + 23 ..]);
+        beacons.append(beacon) catch unreachable;
+        if (!beacon_set.contains(beacon)) unique_beacons.append(beacon) catch unreachable;
+        beacon_set.put(beacon, {}) catch unreachable;
+        min_x = std.math.min(std.math.min(sensor.x, beacon.x), min_x);
+        max_x = std.math.max(std.math.max(sensor.x, beacon.x), max_x);
+        min_y = std.math.min(std.math.min(sensor.y, beacon.y), min_y);
+        max_y = std.math.max(std.math.max(sensor.y, beacon.y), max_y);
+    }
+
+    // Part 1 single line
+    var segments = generateSegmentsForLine(target_y, sensors, beacons, allocator);
     var running_len: usize = 0;
     for (segments.items) | segment | {
         running_len += segment.len;
         // Any beacons that are in the segment need to be discounted.
-        for (target_beacons.items) |beacon| {
-            if (segment.contains(beacon.x)) running_len -= 1;
+        for (unique_beacons.items) |beacon| {
+            if (beacon.y == target_y and segment.contains(beacon.x)) running_len -= 1;
         }
     }
-
-    _ = search_bound - 1;
-
     segments.deinit();
 
-    return Answer{ .part_1 = running_len, .part_2 = 0 };
+    // Part 2 search
+    var search_y: isize = 0;
+    const part_2: usize = while (search_y < search_bound) : (search_y += 1) {
+        segments = generateSegmentsForLine(search_y, sensors, beacons, allocator);
+        defer segments.deinit();
+        if (segments.items.len > 1) {
+            break std.math.absCast(segments.items[0].max + 1) * 4000000 + std.math.absCast(search_y);
+        }
+    } else 0;
+
+    return Answer{ .part_1 = running_len, .part_2 = part_2 };
 }
 
 pub fn run(allocator: Allocator) void {
