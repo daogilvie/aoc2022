@@ -67,7 +67,25 @@ const Point = struct {
         const y = std.fmt.parseInt(isize, y_part[2..], 10) catch unreachable;
         return Point{ .x = x, .y = y };
     }
+
+    fn stepTowards(self: *Point, other: Point) bool {
+        if (self.x == other.x and self.y == other.y) return false;
+        if (self.x > other.x) self.x -= 1
+        else if (self.x < other.x) self.x += 1;
+        if (self.y > other.y) self.y -= 1
+        else if (self.y < other.y) self.y += 1;
+        return true;
+    }
 };
+
+fn incremementPointCounter(point: Point, counter: *std.AutoArrayHashMap(Point, usize)) void {
+    var entry = counter.getOrPut(point) catch unreachable;
+    if (!entry.found_existing) {
+        entry.value_ptr.* = 1;
+    } else {
+        entry.value_ptr.* += 1;
+    }
+}
 
 fn generateSegmentsForLine(target_y: isize, sensors: ArrayList(Point), beacons: ArrayList(Point), allocator: Allocator) ArrayList(Segment) {
     var segments = ArrayList(Segment).init(allocator);
@@ -114,6 +132,10 @@ pub fn solve(filename: str, allocator: Allocator, target_y: isize, search_bound:
 
     var sensors = ArrayList(Point).init(allocator);
     defer sensors.deinit();
+
+    var sensor_distances = ArrayList(isize).init(allocator);
+    defer sensor_distances.deinit();
+
     var beacons = ArrayList(Point).init(allocator);
     defer beacons.deinit();
 
@@ -122,6 +144,9 @@ pub fn solve(filename: str, allocator: Allocator, target_y: isize, search_bound:
 
     var unique_beacons = ArrayList(Point).init(allocator);
     defer unique_beacons.deinit();
+
+    var boundary_points = std.AutoArrayHashMap(Point, usize).init(allocator);
+    defer boundary_points.deinit();
 
     var min_x: isize = std.math.maxInt(isize);
     var max_x: isize = std.math.minInt(isize);
@@ -133,6 +158,7 @@ pub fn solve(filename: str, allocator: Allocator, target_y: isize, search_bound:
         sensors.append(sensor) catch unreachable;
         const beacon = Point.fromStr(line[col_pos + 23 ..]);
         beacons.append(beacon) catch unreachable;
+        sensor_distances.append(sensor.getOffset(beacon).manhattanDistance()) catch unreachable;
         if (!beacon_set.contains(beacon)) unique_beacons.append(beacon) catch unreachable;
         beacon_set.put(beacon, {}) catch unreachable;
         min_x = std.math.min(std.math.min(sensor.x, beacon.x), min_x);
@@ -140,6 +166,7 @@ pub fn solve(filename: str, allocator: Allocator, target_y: isize, search_bound:
         min_y = std.math.min(std.math.min(sensor.y, beacon.y), min_y);
         max_y = std.math.max(std.math.max(sensor.y, beacon.y), max_y);
     }
+
 
     // Part 1 single line
     var segments = generateSegmentsForLine(target_y, sensors, beacons, allocator);
@@ -154,16 +181,57 @@ pub fn solve(filename: str, allocator: Allocator, target_y: isize, search_bound:
     segments.deinit();
 
     // Part 2 search
-    var search_y: isize = 0;
-    const part_2: usize = while (search_y < search_bound) : (search_y += 1) {
-        segments = generateSegmentsForLine(search_y, sensors, beacons, allocator);
-        defer segments.deinit();
-        if (segments.items.len > 1) {
-            break std.math.absCast(segments.items[0].max + 1) * 4000000 + std.math.absCast(search_y);
+    const search_segment = Segment.init(0, search_bound);
+    const start = std.time.timestamp();
+
+    for (sensors.items) |sensor, index| {
+        const beacon = beacons.items[index];
+        const beacon_distance = sensor.getOffset(beacon).manhattanDistance() + 1;
+        const top_most = Point {.x = sensor.x, .y = sensor.y - beacon_distance};
+        const right_most = Point {.x = sensor.x + beacon_distance, .y = sensor.y};
+        const bottom_most = Point {.x = sensor.x, .y = sensor.y + beacon_distance};
+        const left_most = Point {.x = sensor.x - beacon_distance, .y = sensor.y};
+        var boundary_point = top_most;
+        while (boundary_point.stepTowards(right_most)) {
+            if (search_segment.contains(boundary_point.x) and search_segment.contains(boundary_point.y))
+            incremementPointCounter(boundary_point, &boundary_points);
         }
+        while (boundary_point.stepTowards(bottom_most)) {
+            if (search_segment.contains(boundary_point.x) and search_segment.contains(boundary_point.y))
+            incremementPointCounter(boundary_point, &boundary_points);
+        }
+        while (boundary_point.stepTowards(left_most)) {
+            if (search_segment.contains(boundary_point.x) and search_segment.contains(boundary_point.y))
+            incremementPointCounter(boundary_point, &boundary_points);
+        }
+        while (boundary_point.stepTowards(top_most)) {
+            if (search_segment.contains(boundary_point.x) and search_segment.contains(boundary_point.y))
+            incremementPointCounter(boundary_point, &boundary_points);
+        }
+    }
+
+    var bp_iter = boundary_points.iterator();
+    const experimental: usize = exp: while (bp_iter.next()) |entry| {
+        const p = entry.key_ptr.*;
+        const v = entry.value_ptr.*;
+        // If the value is 1, don't bother checking anything. The point just kinda has
+        // to border multiple sensors apart from in 4 degenerate cases, which we could
+        // check for explicitly (the corners);
+        if (v == 1) continue;
+
+        inner: for (sensors.items) |sensor, index| {
+            const threshold = sensor_distances.items[index];
+            if (p.getOffset(sensor).manhattanDistance() <= threshold) break :inner;
+        } else {
+            // THIS IS THE POINT!
+            if (v > 1) break :exp std.math.absCast(p.x) * 4000000 + std.math.absCast(p.y);
+        }
+
     } else 0;
 
-    return Answer{ .part_1 = running_len, .part_2 = part_2 };
+    print("\n Part 2 approx duration {d}s\n", .{std.time.timestamp() - start});
+
+    return Answer{ .part_1 = running_len, .part_2 = experimental };
 }
 
 pub fn run(allocator: Allocator) void {
