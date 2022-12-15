@@ -16,6 +16,33 @@ const Offset = struct {
     }
 };
 
+const Segment = struct {
+    min: isize,
+    max: isize,
+    len: usize,
+
+    fn init(min: isize, max: isize) Segment {
+        return Segment{ .min = min, .max = max, .len = std.math.absCast(max - min) + 1 };
+    }
+
+    fn contains(self: Segment, num: isize) bool {
+        return num >= self.min and num <= self.max;
+    }
+
+    fn overlaps(self: Segment, other: Segment) bool {
+        return (self.min >= other.min and self.min <= other.max) or (other.min >= self.min and other.min <= self.max);
+    }
+
+    fn combineWith(self: Segment, other: Segment) ?Segment {
+        if (!self.overlaps(other)) return null;
+        return Segment.init(std.math.min(self.min, other.min), std.math.max(self.max, other.max));
+    }
+};
+
+fn sortSegments(_: void, a: Segment, b: Segment) bool {
+    return a.min < b.min;
+}
+
 const Point = struct {
     x: isize,
     y: isize,
@@ -42,8 +69,7 @@ const Point = struct {
     }
 };
 
-
-pub fn solve(filename: str, allocator: Allocator, target_y: isize) !Answer {
+pub fn solve(filename: str, allocator: Allocator, target_y: isize, search_bound: isize) !Answer {
     const content = try utils.readInputFileToBuffer(filename, allocator);
     defer allocator.free(content);
     var lines = std.mem.tokenize(u8, content, "\n");
@@ -56,6 +82,9 @@ pub fn solve(filename: str, allocator: Allocator, target_y: isize) !Answer {
     var beacon_set = std.AutoHashMap(Point, void).init(allocator);
     defer beacon_set.deinit();
 
+    var target_beacons = std.ArrayList(Point).init(allocator);
+    defer target_beacons.deinit();
+
     var min_x: isize = std.math.maxInt(isize);
     var max_x: isize = std.math.minInt(isize);
     var min_y: isize = std.math.maxInt(isize);
@@ -66,46 +95,79 @@ pub fn solve(filename: str, allocator: Allocator, target_y: isize) !Answer {
         sensors.append(sensor) catch unreachable;
         const beacon = Point.fromStr(line[col_pos + 23 ..]);
         beacons.append(beacon) catch unreachable;
+        // Store beacons on the target line for later convenience
+        if (beacon.y == target_y and !beacon_set.contains(beacon)) {
+            target_beacons.append(beacon) catch unreachable;
+        }
         beacon_set.put(beacon, {}) catch unreachable;
         min_x = std.math.min(std.math.min(sensor.x, beacon.x), min_x);
         max_x = std.math.max(std.math.max(sensor.x, beacon.x), max_x);
         min_y = std.math.min(std.math.min(sensor.y, beacon.y), min_y);
         max_y = std.math.max(std.math.max(sensor.y, beacon.y), max_y);
     }
-    var reached_spots = std.AutoHashMap(Point, void).init(allocator);
-    defer reached_spots.deinit();
+    var segments = ArrayList(Segment).init(allocator);
     for (sensors.items) |sensor, index| {
         const beacon = beacons.items[index];
         const beacon_distance = sensor.getOffset(beacon).manhattanDistance();
         const target_distance = std.math.absInt(target_y - sensor.y) catch unreachable;
 
         const wiggle_room = beacon_distance - target_distance;
-
         if (wiggle_room >= 0) {
-            var target_x = sensor.x - wiggle_room;
-            var limit_x = sensor.x + wiggle_room;
-            while (target_x <= limit_x) : (target_x += 1) {
-                const t_point = Point{ .x = target_x, .y = target_y };
-                if (!beacon_set.contains(t_point)) {
-                    reached_spots.put(t_point, {}) catch unreachable;
-                }
+
+            segments.append(Segment.init(sensor.x - wiggle_room, sensor.x + wiggle_room)) catch unreachable;
+        }
+    }
+    var maximally_combined = false;
+    while (!maximally_combined) {
+        maximally_combined = true;
+        var sorted_slice = segments.toOwnedSlice() catch unreachable;
+        segments = ArrayList(Segment).init(allocator);
+        std.sort.sort(Segment, sorted_slice, {}, sortSegments);
+        var current_segment = sorted_slice[0];
+        for (sorted_slice[1..]) |test_segment| {
+            if (current_segment.combineWith(test_segment)) |combined| {
+                maximally_combined = false;
+                current_segment = combined;
+            } else {
+                segments.append(current_segment) catch unreachable;
+                current_segment = test_segment;
             }
+        }
+        segments.append(current_segment) catch unreachable;
+
+        allocator.free(sorted_slice);
+    }
+
+    var running_len: usize = 0;
+    for (segments.items) | segment | {
+        running_len += segment.len;
+        // Any beacons that are in the segment need to be discounted.
+        for (target_beacons.items) |beacon| {
+            if (segment.contains(beacon.x)) running_len -= 1;
         }
     }
 
-    return Answer{ .part_1 = reached_spots.count(), .part_2 = 0 };
+    _ = search_bound - 1;
+
+    segments.deinit();
+
+    return Answer{ .part_1 = running_len, .part_2 = 0 };
 }
 
 pub fn run(allocator: Allocator) void {
     utils.printHeader("Day 15");
-    var answer = solve("day15.in", allocator, 2000000) catch unreachable;
+    var answer = solve("day15.in", allocator, 2000000, 4000000) catch unreachable;
     answer.print();
 }
 
 test "day 15 worked examples" {
-    var answer = try solve("day15.test", std.testing.allocator, 10);
+    var answer = try solve("day15.test", std.testing.allocator, 10, 20);
     std.testing.expect(answer.part_1 == 26) catch |err| {
         print("{d} is not 26\n", .{answer.part_1});
+        return err;
+    };
+    std.testing.expect(answer.part_2 == 56000011) catch |err| {
+        print("{d} is not 56000011\n", .{answer.part_2});
         return err;
     };
 }
