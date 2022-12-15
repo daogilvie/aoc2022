@@ -27,8 +27,8 @@ const Point = struct {
 
     fn getOffset(self: Point, other: Point) Offset {
         return Offset{
-            .x = std.math.cast(usize, other.x).? - std.math.cast(usize, self.x).?,
-            .y = std.math.cast(usize, other.y).? - std.math.cast(usize, self.y).?,
+            .x = other.x - self.x,
+            .y = other.y - self.y,
         };
     }
 
