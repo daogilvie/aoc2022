@@ -7,6 +7,7 @@ const ArrayList = std.ArrayList;
 const Answer = utils.Answer;
 const print = std.debug.print;
 
+
 const Offset = struct {
     x: isize,
     y: isize,
@@ -178,7 +179,6 @@ pub fn solve(filename: str, allocator: Allocator, target_y: isize, search_bound:
     segments.deinit();
 
     // Part 2 search
-    const start = std.time.milliTimestamp();
     var interesting_points = std.AutoArrayHashMap(Point, void).init(allocator);
     defer interesting_points.deinit();
     // We loop through every pair of sensors until we find two that are exactly
@@ -257,8 +257,6 @@ pub fn solve(filename: str, allocator: Allocator, target_y: isize, search_bound:
             break :exp std.math.absCast(p.x) * 4000000 + std.math.absCast(p.y);
         }
     } else 0;
-
-    print("Part 2 approx duration {d}ms\n", .{std.time.milliTimestamp() - start});
 
     return Answer{ .part_1 = running_len, .part_2 = experimental };
 }
