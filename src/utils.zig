@@ -45,3 +45,62 @@ pub const AnswerStr = struct {
         self.allocator.free(self.part_2);
     }
 };
+
+fn factorial(n: usize) usize {
+    var f: usize = 1;
+    var count: usize = n;
+    while (count > 0) : (count -= 1) {
+        f *= count;
+    }
+    return f;
+}
+
+fn PermutationsIterator() type {
+    return struct {
+        size: usize,
+        c: []usize,
+        A: []u8,
+        i: usize = 0,
+        len: usize,
+        allocator: std.mem.Allocator,
+        const Self = @This();
+
+        pub fn init(size: usize, allocator: std.mem.Allocator) Self {
+            var inds = allocator.alloc(usize, size) catch unreachable;
+            var output = allocator.alloc(u8, size) catch unreachable;
+            std.mem.set(usize, inds, 0);
+            for (output) |_, ind| {
+                output[ind] = @truncate(u8, ind);
+            }
+            return .{ .size = size, .c = inds, .A = output, .len = factorial(size), .allocator = allocator };
+        }
+
+        fn deinit(self: Self) void {
+            self.allocator.free(self.c);
+            self.allocator.free(self.A);
+        }
+
+        fn next(self: *Self) ?[]u8 {
+            if (self.i >= self.size) {
+                self.deinit();
+                return null;
+            }
+            if (self.i == 0) {
+                self.i = 1;
+            } else if (self.c[self.i] < self.i) {
+                if (@rem(self.i, 2) == 0) {
+                    std.mem.swap(u8, &self.A[0], &self.A[self.i]);
+                } else {
+                    std.mem.swap(u8, &self.A[self.c[self.i]], &self.A[self.i]);
+                }
+                self.c[self.i] += 1;
+                self.i = 1;
+            } else {
+                self.c[self.i] = 0;
+                self.i += 1;
+                return self.next();
+            }
+            return self.A;
+        }
+    };
+}
