@@ -178,6 +178,7 @@ pub fn solve(filename: str, allocator: Allocator, target_y: isize, search_bound:
     segments.deinit();
 
     // Part 2 search
+    const start = std.time.milliTimestamp();
     var interesting_points = std.AutoArrayHashMap(Point, void).init(allocator);
     defer interesting_points.deinit();
     // We loop through every pair of sensors until we find two that are exactly
@@ -186,53 +187,60 @@ pub fn solve(filename: str, allocator: Allocator, target_y: isize, search_bound:
     // two sensors share. We consider the boundary of the smallest sensor, and
     // save any points that border the other sensor for consideration in a second
     // loop below.
-    outer: for (sensors.items) |sensor_lhs, lhs_index| {
+    var smallest_sensor: Point = undefined;
+    var other: Point = undefined;
+    var smallest_distance: isize = std.math.maxInt(isize);
+    var other_distance: isize = std.math.maxInt(isize);
+    for (sensors.items) |sensor_lhs, lhs_index| {
         const lhs_distance = sensor_distances.items[lhs_index];
         for (sensors.items) |sensor_rhs, rhs_index| {
             if (rhs_index == lhs_index) continue;
             const rhs_distance = sensor_distances.items[rhs_index];
             var offset = sensor_lhs.getOffset(sensor_rhs);
             if (lhs_distance + rhs_distance == offset.manhattanDistance() - 2) {
-                // Find points that are the right distance away from both.
-                var smallest = sensor_lhs;
-                var other = sensor_rhs;
-                var other_dist = rhs_distance;
-                var smallest_dist = std.math.min(rhs_distance, lhs_distance);
-                if (rhs_distance < lhs_distance) {
-                    smallest = sensor_rhs;
-                    other_dist = lhs_distance;
+                // To minimise the points we loop over, we track the smallest sensor
+                if (lhs_distance < smallest_distance) {
+                    smallest_sensor = sensor_lhs;
+                    smallest_distance = lhs_distance;
+                    other = sensor_rhs;
+                    other_distance= rhs_distance;
+                }
+                if (rhs_distance < smallest_distance) {
+                    smallest_sensor = sensor_rhs;
+                    smallest_distance = rhs_distance;
                     other = sensor_lhs;
+                    other_distance= lhs_distance;
                 }
-                other_dist += 1;
-                smallest_dist += 1;
-                const top_most = Point{ .x = smallest.x, .y = smallest.y - smallest_dist };
-                const right_most = Point{ .x = smallest.x + smallest_dist, .y = smallest.y };
-                const bottom_most = Point{ .x = smallest.x, .y = smallest.y + smallest_dist };
-                const left_most = Point{ .x = smallest.x - smallest_dist, .y = smallest.y };
-                var boundary_point = top_most;
-                while (boundary_point.stepTowards(right_most)) {
-                    if (boundary_point.x < 0 or boundary_point.x > search_bound or boundary_point.y < 0 or boundary_point.y > search_bound) continue;
-                    if (boundary_point.getOffset(other).manhattanDistance() == other_dist)
-                        interesting_points.put(boundary_point, {}) catch unreachable;
-                }
-                while (boundary_point.stepTowards(bottom_most)) {
-                    if (boundary_point.x < 0 or boundary_point.x > search_bound or boundary_point.y < 0 or boundary_point.y > search_bound) continue;
-                    if (boundary_point.getOffset(other).manhattanDistance() == other_dist)
-                        interesting_points.put(boundary_point, {}) catch unreachable;
-                }
-                while (boundary_point.stepTowards(left_most)) {
-                    if (boundary_point.x < 0 or boundary_point.x > search_bound or boundary_point.y < 0 or boundary_point.y > search_bound) continue;
-                    if (boundary_point.getOffset(other).manhattanDistance() == other_dist)
-                        interesting_points.put(boundary_point, {}) catch unreachable;
-                }
-                while (boundary_point.stepTowards(top_most)) {
-                    if (boundary_point.x < 0 or boundary_point.x > search_bound or boundary_point.y < 0 or boundary_point.y > search_bound) continue;
-                    if (boundary_point.getOffset(other).manhattanDistance() == other_dist)
-                        interesting_points.put(boundary_point, {}) catch unreachable;
-                }
-                break :outer;
             }
         }
+    }
+
+    smallest_distance += 1;
+    other_distance += 1;
+    const top_most = Point{ .x = smallest_sensor.x, .y = smallest_sensor.y - smallest_distance };
+    const right_most = Point{ .x = smallest_sensor.x + smallest_distance, .y = smallest_sensor.y };
+    const bottom_most = Point{ .x = smallest_sensor.x, .y = smallest_sensor.y + smallest_distance };
+    const left_most = Point{ .x = smallest_sensor.x - smallest_distance, .y = smallest_sensor.y };
+    var boundary_point = top_most;
+    while (boundary_point.stepTowards(right_most)) {
+        if (boundary_point.x < 0 or boundary_point.x > search_bound or boundary_point.y < 0 or boundary_point.y > search_bound) continue;
+        if (boundary_point.getOffset(other).manhattanDistance() == other_distance)
+            interesting_points.put(boundary_point, {}) catch unreachable;
+    }
+    while (boundary_point.stepTowards(bottom_most)) {
+        if (boundary_point.x < 0 or boundary_point.x > search_bound or boundary_point.y < 0 or boundary_point.y > search_bound) continue;
+        if (boundary_point.getOffset(other).manhattanDistance() == other_distance)
+            interesting_points.put(boundary_point, {}) catch unreachable;
+    }
+    while (boundary_point.stepTowards(left_most)) {
+        if (boundary_point.x < 0 or boundary_point.x > search_bound or boundary_point.y < 0 or boundary_point.y > search_bound) continue;
+        if (boundary_point.getOffset(other).manhattanDistance() == other_distance)
+            interesting_points.put(boundary_point, {}) catch unreachable;
+    }
+    while (boundary_point.stepTowards(top_most)) {
+        if (boundary_point.x < 0 or boundary_point.x > search_bound or boundary_point.y < 0 or boundary_point.y > search_bound) continue;
+        if (boundary_point.getOffset(other).manhattanDistance() == other_distance)
+            interesting_points.put(boundary_point, {}) catch unreachable;
     }
 
     // Here we consider the very small set of points that we know must contain
@@ -249,6 +257,8 @@ pub fn solve(filename: str, allocator: Allocator, target_y: isize, search_bound:
             break :exp std.math.absCast(p.x) * 4000000 + std.math.absCast(p.y);
         }
     } else 0;
+
+    print("Part 2 approx duration {d}ms\n", .{std.time.milliTimestamp() - start});
 
     return Answer{ .part_1 = running_len, .part_2 = experimental };
 }
