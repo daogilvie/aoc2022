@@ -34,7 +34,6 @@ const Valve = struct {
 };
 
 const SHIFT_1: usize = 1;
-const ValveSet = std.StringHashMap(Valve);
 
 fn parseValve(line: str, allocator: Allocator) Valve {
     var words = std.mem.tokenize(u8, line, " ");
