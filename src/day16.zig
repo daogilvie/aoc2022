@@ -197,6 +197,7 @@ fn explore(current_state: PuzzleState, remaining: []Valve, ctx: *PuzzleContext) 
 
 const PartitionIter = struct {
     source: []Valve,
+    bucket_parts: [][]Valve,
     bucket_0: []Valve,
     bucket_1: []Valve,
     current_partition: usize = 0,
@@ -205,14 +206,16 @@ const PartitionIter = struct {
 
     pub fn init(valves: []Valve, allocator: Allocator) PartitionIter {
         const limit = SHIFT_1 << @truncate(u6, valves.len - 1);
+        var buckets = allocator.alloc([]Valve, 2) catch unreachable;
         var bucket_0 = allocator.alloc(Valve, valves.len - 1) catch unreachable;
         var bucket_1 = allocator.alloc(Valve, valves.len - 1) catch unreachable;
-        return PartitionIter{ .source = valves, .limit = limit, .bucket_0 = bucket_0, .bucket_1 = bucket_1, .allocator = allocator };
+        return PartitionIter{ .source = valves, .limit = limit, .bucket_0 = bucket_0, .bucket_parts = buckets, .bucket_1 = bucket_1, .allocator = allocator };
     }
 
     pub fn next(self: *PartitionIter) ?[][]Valve {
         self.current_partition += 1;
         if (self.current_partition > self.limit) {
+            self.allocator.free(self.bucket_parts);
             self.allocator.free(self.bucket_0);
             self.allocator.free(self.bucket_1);
             return null;
@@ -232,10 +235,9 @@ const PartitionIter = struct {
                 where_0_ind += 1;
             }
         }
-        var parts = self.allocator.alloc([]Valve, 2) catch unreachable;
-        parts[0] = self.bucket_0[0..where_0_ind];
-        parts[1] = self.bucket_1[0..where_1_ind];
-        return parts;
+        self.bucket_parts[0] = self.bucket_0[0..where_0_ind];
+        self.bucket_parts[1] = self.bucket_1[0..where_1_ind];
+        return self.bucket_parts;
     }
 };
 
@@ -269,10 +271,6 @@ pub fn solve(filename: str, allocator: Allocator) !Answer {
     var p_count: usize = 0;
     print("\n", .{});
     while (partitions.next()) |valve_sets| {
-        defer {
-            allocator.free(valve_sets);
-        }
-
         p_count += 1;
         print("\r{d: >2} / {d}", .{ p_count, partitions.limit });
         // Heuristics for a quick skip? I'm assuming the partitions where only < 1/3rd  of
