@@ -93,6 +93,8 @@ const PuzzleContext = struct {
             }
             index_map.put(valve.id, index) catch unreachable;
         }
+        const start_ind = index_map.get("AA").?;
+        valves[start_ind].ind_u = useful_ind;
 
         // Edges
         for (valves) |valve, index| {
@@ -115,24 +117,25 @@ const PuzzleContext = struct {
 
         const uv = useful_valves.toOwnedSlice() catch unreachable;
 
-        // // We now downselect the distance matrix to be only the useful valves
-        // var dist_u: [][]usize = allocator.alloc([]usize, uv.len) catch unreachable;
-        //
-        // for (dist_u) |*du_slice, uv_ind| {
-        //     du_slice.* = allocator.alloc(usize, uv.len) catch unreachable;
-        //     const source_valve = uv[uv_ind];
-        //     const source_slice = dist[source_valve.ind];
-        //     for (du_slice.*) |*entry, index| {
-        //         const dest_valve = uv[index];
-        //         entry.* = source_slice[dest_valve.ind];
-        //     }
-        // }
-        //
-        // for (dist) |d_slice| {
-        //     allocator.free(d_slice);
-        // }
-        // allocator.free(dist);
-        return PuzzleContext{ .valves = valves, .distances = dist, .allocator = allocator, .uv = uv };
+        // We now downselect the distance matrix to be only the useful valves
+        // Plus the starting valve for the initial exploration.
+        var dist_u: [][]usize = allocator.alloc([]usize, uv.len + 1) catch unreachable;
+
+        for (dist_u) |*du_slice, uv_ind| {
+            du_slice.* = allocator.alloc(usize, uv.len + 1) catch unreachable;
+            const source_valve = if (uv_ind == uv.len) valves[start_ind] else uv[uv_ind];
+            const source_slice = dist[source_valve.ind];
+            for (du_slice.*) |*entry, index| {
+                const dest_valve = if (index == uv.len) valves[start_ind] else uv[index];
+                entry.* = source_slice[dest_valve.ind];
+            }
+        }
+
+        for (dist) |d_slice| {
+            allocator.free(d_slice);
+        }
+        allocator.free(dist);
+        return PuzzleContext{ .valves = valves, .distances = dist_u, .allocator = allocator, .uv = uv };
     }
 
     fn deinit(self: *PuzzleContext) void {
@@ -148,7 +151,7 @@ const PuzzleContext = struct {
     }
 
     fn getDistance(self: PuzzleContext, from: Valve, to: Valve) usize {
-        return self.distances[from.ind][to.ind];
+        return self.distances[from.ind_u][to.ind_u];
     }
 };
 
