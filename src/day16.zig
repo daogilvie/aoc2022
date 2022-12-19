@@ -70,7 +70,9 @@ const PuzzleContext = struct {
     allocator: Allocator,
     valves: []Valve,
     uv: []Valve,
+    start_valve: Valve,
     max_ticks: usize = 30,
+    flow_rates: []usize,
 
     fn init(valves: []Valve, allocator: Allocator) PuzzleContext {
         // Floyd Warshall approach
@@ -116,6 +118,10 @@ const PuzzleContext = struct {
         }
 
         const uv = useful_valves.toOwnedSlice() catch unreachable;
+        var flow_rates: []usize = allocator.alloc(usize, uv.len) catch unreachable;
+        for (uv) |v, ind| {
+            flow_rates[ind] = v.flow_rate;
+        }
 
         // We now downselect the distance matrix to be only the useful valves
         // Plus the starting valve for the initial exploration.
@@ -135,13 +141,14 @@ const PuzzleContext = struct {
             allocator.free(d_slice);
         }
         allocator.free(dist);
-        return PuzzleContext{ .valves = valves, .distances = dist_u, .allocator = allocator, .uv = uv };
+        return PuzzleContext{ .valves = valves, .distances = dist_u, .start_valve = valves[start_ind], .allocator = allocator, .uv = uv, .flow_rates = flow_rates };
     }
 
     fn deinit(self: *PuzzleContext) void {
         for (self.distances) |d_slice| {
             self.allocator.free(d_slice);
         }
+        self.allocator.free(self.flow_rates);
         self.allocator.free(self.distances);
         for (self.valves) |*v| {
             v.deinit();
@@ -151,31 +158,56 @@ const PuzzleContext = struct {
     }
 
     fn getDistance(self: PuzzleContext, from: Valve, to: Valve) usize {
-        return self.distances[from.ind_u][to.ind_u];
+        return self.getDistanceInd(from.ind_u, to.ind_u);
+    }
+
+    fn getDistanceInd(self: PuzzleContext, from_i: usize, to_i: usize) usize {
+        return self.distances[from_i][to_i];
     }
 };
 
-// const PuzzleMatrixState = struct {
-//     time_tick: usize,
-//     values: [][]usize,
-//     allocator: Allocator,
-//
-//     pub fn init(ctx: *PuzzleContext) PuzzleMatrixState {
-//         const arr_size = ctx.*.uv.len;
-//         var my_values: [][]usize = ctx.*.allocator.alloc([]usize, arr_size);
-//         for (my_values) |*v_slice| {
-//             v_slice.* = allocator.alloc(usize, arr_size) catch unreachable;
-//         }
-//         var time: usize = 1;
-//     }
-//
-//     fn deinit(self: *PuzzleMatrixState) void {
-//         for (self.values) |v_slice| {
-//             self.allocator.free(v_slice);
-//         }
-//     }
-//
-// }
+const PuzzleMatrixState = struct {
+    time_tick: usize,
+    sunk_time_steps: []usize,
+    sunk_time_total: usize = 0,
+    benefits: []usize,
+    benefit_total: usize = 0,
+    current_valve_index: usize,
+    valves_visited: usize = 0,
+    ctx: *const PuzzleContext,
+
+    pub fn init(ctx: *const PuzzleContext) PuzzleMatrixState {
+        var benefits: []usize = ctx.allocator.alloc(usize, ctx.uv.len) catch unreachable;
+        std.mem.set(usize, benefits, 0);
+        var sunk_time: []usize = ctx.allocator.alloc(usize, ctx.uv.len) catch unreachable;
+        std.mem.set(usize, sunk_time, 0);
+        return PuzzleMatrixState{ .time_tick = 0, .sunk_time_steps = sunk_time, .current_valve_index = ctx.start_valve.ind_u, .ctx = ctx, .benefits = benefits };
+    }
+
+    fn deinit(self: *PuzzleMatrixState) void {
+        self.ctx.allocator.free(self.sunk_time_steps);
+        self.ctx.allocator.free(self.benefits);
+    }
+
+    fn advanceToValve(self: *PuzzleMatrixState, new_index: usize) usize {
+        const cost = self.ctx.getDistanceInd(self.current_valve_index, new_index) + 1;
+        self.sunk_time_steps[self.valves_visited] = cost;
+        self.sunk_time_total += cost;
+        if (self.sunk_time_total >= self.ctx.max_ticks) return self.benefit_total;
+        self.benefits[self.valves_visited] = self.ctx.flow_rates[new_index] * (self.ctx.max_ticks - self.sunk_time_total);
+        self.benefit_total += self.benefits[self.valves_visited];
+        self.valves_visited += 1;
+        return self.benefit_total;
+    }
+
+    fn unwindTo(self: *PuzzleMatrixState, depth: usize) void {
+        while (self.valves_visited > depth) : (self.valves_visited -= 1) {
+            print("UNWIND\n", .{});
+            self.sunk_time_total -= self.sunk_time_steps[self.valves_visited - 1];
+            self.benefit_total -= self.benefits[self.valves_visited - 1];
+        }
+    }
+};
 
 const PuzzleState = struct {
     ctx: *const PuzzleContext,
@@ -215,6 +247,46 @@ const PuzzleState = struct {
         return if (self.time_spent > self.ctx.max_ticks) 0 else self.total_flow_benefit;
     }
 };
+
+fn exploreMatrix(ctx: PuzzleContext) usize {
+    var state = PuzzleMatrixState.init(&ctx);
+    var indices = ctx.allocator.alloc(usize, ctx.uv.len) catch unreachable;
+    for (indices) |*i, ind| {
+        i.* = ind;
+    }
+    defer ctx.allocator.free(indices);
+    defer state.deinit();
+
+    print("{any}\n", .{ctx.uv});
+
+    return exploreMatrixR(&state, indices, ctx);
+}
+
+fn exploreMatrixR(matrix: *PuzzleMatrixState, open_set: []usize, ctx: PuzzleContext) usize {
+    print("{[0]s: >[1]}EXPLORE MATRIX {[2]any}\n", .{ ">", 12 - open_set.len * 2, open_set });
+    if (open_set.len == 1) {
+        var m = matrix.advanceToValve(open_set[0]);
+        print("{[0]s: >[1]}Degen case {[2]d}: {[3]d}\n", .{ ">", 14 - open_set.len * 2, open_set[0], m });
+        return m;
+    }
+    var local_ind = ctx.allocator.alloc(usize, open_set.len) catch unreachable;
+    std.mem.copy(usize, local_ind, open_set);
+    defer ctx.allocator.free(local_ind);
+
+    var local_max: usize = 0;
+    for (open_set) |ind, i| {
+        const new_ben = matrix.advanceToValve(ind);
+        const inter = local_ind[open_set.len - 1];
+        local_ind[open_set.len - 1] = local_ind[i];
+        local_ind[i] = inter;
+        print("{[0]s: >[1]} into {[2]d} = {[3]d} vs {[4]d}. LI={[5]any}\n", .{ ">", 14 - open_set.len * 2, ind, new_ben, local_max, local_ind });
+        local_max = std.math.max(local_max, exploreMatrixR(matrix, local_ind[0 .. open_set.len - 1], ctx));
+        matrix.unwindTo(ctx.uv.len - open_set.len);
+    }
+
+    matrix.unwindTo(ctx.uv.len - open_set.len);
+    return local_max;
+}
 
 fn explore(current_state: PuzzleState, remaining: []Valve, ctx: *PuzzleContext) usize {
     // Degenerate cases:
@@ -312,16 +384,18 @@ pub fn solve(filename: str, allocator: Allocator) !Answer {
     var path = ArrayList(PuzzleState).init(allocator);
     defer path.deinit();
 
+    print("\n", .{});
     const p1_start = std.time.milliTimestamp();
-    var part_1 = explore(root_state, ctx.uv, &ctx);
+    // var part_1 = explore(root_state, ctx.uv, &ctx);
+    var part_1 = exploreMatrix(ctx);
     print("P1 took: ~{d}ms\n", .{std.time.milliTimestamp() - p1_start});
 
     const p2_start = @intCast(usize, std.time.timestamp());
-    var avg: usize = 0;
+    var avg: f64 = 0;
     ctx.max_ticks = 26;
     var part_2: usize = 0;
     var partitions = PartitionIter.init(ctx.uv, allocator);
-    var lim = partitions.limit;
+    var lim = @intToFloat(f64, partitions.limit);
     var total_flow_available: usize = 0;
     for (ctx.uv) |v| {
         total_flow_available += v.flow_rate;
@@ -329,12 +403,12 @@ pub fn solve(filename: str, allocator: Allocator) !Answer {
     const flow_cutoff_low = total_flow_available / 4;
     const flow_cutoff_high = total_flow_available - (total_flow_available / 4);
     var size_cutoff: usize = @divTrunc(ctx.uv.len, 3);
-    var p_count: usize = 0;
+    var p_count: f64 = 0;
     print("\n", .{});
     while (partitions.next()) |valve_sets| {
         p_count += 1;
-        print("\r{d: >2} / {d}, ETA ~={d}s", .{ p_count, partitions.limit, avg * (lim - p_count) });
-        if (@rem(p_count, 500) == 0) avg = (@intCast(usize, std.time.timestamp()) - p2_start) / p_count;
+        print("\r{d: >2} / {d}, Remaining ~= {d:.0} / {d:.0}s", .{ p_count, partitions.limit, avg * (lim - p_count), avg * lim });
+        if (@rem(p_count, 300) == 0) avg = @intToFloat(f64, @intCast(usize, std.time.timestamp()) - p2_start) / p_count;
         // Heuristics for a quick skip? I'm assuming the partitions where only <= 1/3rd  of
         // valves are in one side just won't cut it.
         // I'm also going to assume that if the total available flow in one partition is much larger (i.e >100%) than
