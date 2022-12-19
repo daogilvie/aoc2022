@@ -10,7 +10,8 @@ const print = std.debug.print;
 
 const Valve = struct {
     id: str,
-    id_u: u16,
+    ind: usize = 0,
+    ind_u: usize = 0,
     flow_rate: usize,
     neighbours: [][]const u8,
     allocator: Allocator,
@@ -61,11 +62,10 @@ fn parseValve(line: str, allocator: Allocator) Valve {
         neighbour_al.append(neighbour[0..2]) catch unreachable;
     }
 
-    return Valve{ .id = id, .id_u = std.mem.bytesToValue(u16, id[0..2]), .flow_rate = flow_rate, .neighbours = neighbour_al.toOwnedSlice() catch unreachable, .allocator = allocator };
+    return Valve{ .id = id, .flow_rate = flow_rate, .neighbours = neighbour_al.toOwnedSlice() catch unreachable, .allocator = allocator };
 }
 
 const PuzzleContext = struct {
-    index_map: std.StringHashMap(usize),
     distances: [][]usize,
     allocator: Allocator,
     valves: []Valve,
@@ -76,14 +76,21 @@ const PuzzleContext = struct {
         // Floyd Warshall approach
         var useful_valves = ArrayList(Valve).init(allocator);
         var index_map = StringHashMap(usize).init(allocator);
+        defer index_map.deinit();
         var dist: [][]usize = allocator.alloc([]usize, valves.len) catch unreachable;
         for (dist) |*d_slice| {
             d_slice.* = allocator.alloc(usize, valves.len) catch unreachable;
             std.mem.set(usize, d_slice.*, valves.len);
         }
 
-        for (valves) |valve, index| {
-            if (valve.flow_rate > 0) useful_valves.append(valve) catch unreachable;
+        var useful_ind: usize = 0;
+        for (valves) |*valve, index| {
+            valve.ind = index;
+            if (valve.flow_rate > 0) {
+                valve.ind_u = useful_ind;
+                useful_valves.append(valve.*) catch unreachable;
+                useful_ind += 1;
+            }
             index_map.put(valve.id, index) catch unreachable;
         }
 
@@ -105,7 +112,27 @@ const PuzzleContext = struct {
                 }
             }
         }
-        return PuzzleContext{ .index_map = index_map, .valves = valves, .distances = dist, .allocator = allocator, .uv = useful_valves.toOwnedSlice() catch unreachable };
+
+        const uv = useful_valves.toOwnedSlice() catch unreachable;
+
+        // // We now downselect the distance matrix to be only the useful valves
+        // var dist_u: [][]usize = allocator.alloc([]usize, uv.len) catch unreachable;
+        //
+        // for (dist_u) |*du_slice, uv_ind| {
+        //     du_slice.* = allocator.alloc(usize, uv.len) catch unreachable;
+        //     const source_valve = uv[uv_ind];
+        //     const source_slice = dist[source_valve.ind];
+        //     for (du_slice.*) |*entry, index| {
+        //         const dest_valve = uv[index];
+        //         entry.* = source_slice[dest_valve.ind];
+        //     }
+        // }
+        //
+        // for (dist) |d_slice| {
+        //     allocator.free(d_slice);
+        // }
+        // allocator.free(dist);
+        return PuzzleContext{ .valves = valves, .distances = dist, .allocator = allocator, .uv = uv };
     }
 
     fn deinit(self: *PuzzleContext) void {
@@ -118,16 +145,34 @@ const PuzzleContext = struct {
         }
         self.allocator.free(self.valves);
         self.allocator.free(self.uv);
-        self.index_map.deinit();
     }
 
     fn getDistance(self: PuzzleContext, from: Valve, to: Valve) usize {
-        const f_index = self.index_map.get(from.id).?;
-        const t_index = self.index_map.get(to.id).?;
-        // Include + 1 for opening the valve
-        return self.distances[f_index][t_index];
+        return self.distances[from.ind][to.ind];
     }
 };
+
+// const PuzzleMatrixState = struct {
+//     time_tick: usize,
+//     values: [][]usize,
+//     allocator: Allocator,
+//
+//     pub fn init(ctx: *PuzzleContext) PuzzleMatrixState {
+//         const arr_size = ctx.*.uv.len;
+//         var my_values: [][]usize = ctx.*.allocator.alloc([]usize, arr_size);
+//         for (my_values) |*v_slice| {
+//             v_slice.* = allocator.alloc(usize, arr_size) catch unreachable;
+//         }
+//         var time: usize = 1;
+//     }
+//
+//     fn deinit(self: *PuzzleMatrixState) void {
+//         for (self.values) |v_slice| {
+//             self.allocator.free(v_slice);
+//         }
+//     }
+//
+// }
 
 const PuzzleState = struct {
     ctx: *const PuzzleContext,
@@ -255,8 +300,10 @@ pub fn solve(filename: str, allocator: Allocator) !Answer {
     var ctx = PuzzleContext.init(valves, allocator);
     defer ctx.deinit();
 
-    // const start_index = ctx.index_map.get("AA").?;
-    const root_valve = ctx.valves[ctx.index_map.get("AA").?];
+    const root_valve = for (ctx.valves) |v| {
+        if (std.mem.eql(u8, v.id, "AA")) break v;
+    } else unreachable;
+
     const root_state = PuzzleState{ .ctx = &ctx, .location = root_valve, .total_flow_benefit = 0, .time_spent = 0 };
 
     var path = ArrayList(PuzzleState).init(allocator);
