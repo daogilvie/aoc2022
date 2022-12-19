@@ -312,24 +312,43 @@ pub fn solve(filename: str, allocator: Allocator) !Answer {
     var path = ArrayList(PuzzleState).init(allocator);
     defer path.deinit();
 
+    const p1_start = std.time.milliTimestamp();
     var part_1 = explore(root_state, ctx.uv, &ctx);
+    print("P1 took: ~{d}ms\n", .{std.time.milliTimestamp() - p1_start});
 
+    const p2_start = @intCast(usize, std.time.timestamp());
+    var avg: usize = 0;
     ctx.max_ticks = 26;
     var part_2: usize = 0;
     var partitions = PartitionIter.init(ctx.uv, allocator);
+    var lim = partitions.limit;
+    var total_flow_available: usize = 0;
+    for (ctx.uv) |v| {
+        total_flow_available += v.flow_rate;
+    }
+    const flow_cutoff_low = total_flow_available / 4;
+    const flow_cutoff_high = total_flow_available - (total_flow_available / 4);
     var size_cutoff: usize = @divTrunc(ctx.uv.len, 3);
     var p_count: usize = 0;
     print("\n", .{});
     while (partitions.next()) |valve_sets| {
         p_count += 1;
-        print("\r{d: >2} / {d}", .{ p_count, partitions.limit });
-        // Heuristics for a quick skip? I'm assuming the partitions where only < 1/3rd  of
+        print("\r{d: >2} / {d}, ETA ~={d}s", .{ p_count, partitions.limit, avg * (lim - p_count) });
+        if (@rem(p_count, 500) == 0) avg = (@intCast(usize, std.time.timestamp()) - p2_start) / p_count;
+        // Heuristics for a quick skip? I'm assuming the partitions where only <= 1/3rd  of
         // valves are in one side just won't cut it.
-        if (valve_sets[0].len < size_cutoff or valve_sets[0].len > ctx.uv.len - size_cutoff) continue;
+        // I'm also going to assume that if the total available flow in one partition is much larger (i.e >100%) than
+        // the other that's also silly
+        if (valve_sets[0].len <= size_cutoff or valve_sets[1].len <= size_cutoff) continue;
+        var tflow_0: usize = 0;
+        for (valve_sets[0]) |v| {
+            tflow_0 += v.flow_rate;
+        }
+        if (tflow_0 >= flow_cutoff_high or tflow_0 <= flow_cutoff_low) continue;
         const local_max = explore(root_state, valve_sets[0], &ctx) + explore(root_state, valve_sets[1], &ctx);
         part_2 = std.math.max(part_2, local_max);
     }
-    print("\n", .{});
+    print("\nP2 took ~{d}s\n", .{@intCast(usize, std.time.timestamp()) - p2_start});
 
     return Answer{ .part_1 = part_1, .part_2 = part_2 };
 }
