@@ -14,6 +14,7 @@ const MAX_CAVERN_IND: usize = CAVERN_WIDTH - 1;
 const APPEARANCE_OFFSET_LEFT = 2;
 const APPEARANCE_OFFSET_HEIGHT = 3;
 const ROCK_LIMIT = 2022;
+const ROCK_LIMIT_2 = 1000000000000;
 
 const MinoType = enum { Wide, Plus, Glider, Tall, Square };
 
@@ -309,6 +310,47 @@ const Cavern = struct {
             },
         }
     }
+
+    fn simulate(self: *Cavern, rock_limit: usize, gas_pattern: str, node: *std.Progress.Node) usize {
+        var gas = GasState.init(gas_pattern);
+
+        var rock: Rock = undefined;
+
+        var rock_count: usize = 0;
+        var should_print = false;
+
+        while (rock_count < rock_limit) : (rock_count += 1) {
+            // should_print = rock_count == ROCK_LIMIT - 1;
+            rock = self.spawnRock();
+            // Do the first 3 gas shifts now, as they are "free" so to speak
+            var i: usize = 0;
+            if (should_print) print("\n", .{});
+            while (i <= APPEARANCE_OFFSET_HEIGHT) : (i += 1) {
+                if (should_print) print("SIMPLE BEFORE: {space}\n", .{rock});
+                rock.shiftSimple(gas.tick());
+                if (should_print) print("{s}\n", .{@tagName(gas.direction)});
+                if (should_print) print("SIMPLE AFTER: {space}\n", .{rock});
+            }
+            var can_fall = self.canFall(rock);
+            if (should_print) print("CF = {}\n", .{can_fall});
+            while (can_fall) : (can_fall = self.canFall(rock)) {
+                if (should_print) print("{space}\n", .{rock});
+                rock.bottom -= 1;
+                switch (gas.tick()) {
+                    .Left => self.shiftRockLeft(&rock),
+                    .Right => self.shiftRockRight(&rock),
+                }
+                if (should_print) print("CF = {}\n", .{can_fall});
+                if (should_print) print("{s}\n", .{@tagName(gas.direction)});
+                if (should_print) print("{space}\n", .{rock});
+            }
+            self.solidifyIntoFloor(rock);
+            if (should_print) print("{}", .{self});
+            node.completeOne();
+        }
+
+        return self.floors.items.len - 1;
+    }
 };
 
 pub fn solve(filename: str, allocator: Allocator) !Answer {
@@ -316,47 +358,24 @@ pub fn solve(filename: str, allocator: Allocator) !Answer {
     var trimmed = std.mem.trimRight(u8, content, &std.ascii.whitespace);
     defer allocator.free(content);
 
-    var gas = GasState.init(trimmed);
-
-    var rock: Rock = undefined;
-
-    var rock_count: usize = 0;
-
     var cavern = Cavern.init(allocator);
     defer cavern.deinit();
 
-    var should_print = false;
-    while (rock_count < ROCK_LIMIT) : (rock_count += 1) {
-        // should_print = rock_count == ROCK_LIMIT - 1;
-        rock = cavern.spawnRock();
-        // Do the first 3 gas shifts now, as they are "free" so to speak
-        var i: usize = 0;
-        if (should_print) print("\n", .{});
-        while (i <= APPEARANCE_OFFSET_HEIGHT) : (i += 1) {
-            if (should_print) print("SIMPLE BEFORE: {space}\n", .{rock});
-            rock.shiftSimple(gas.tick());
-            if (should_print) print("{s}\n", .{@tagName(gas.direction)});
-            if (should_print) print("SIMPLE AFTER: {space}\n", .{rock});
-        }
-        var can_fall = cavern.canFall(rock);
-        if (should_print) print("CF = {}\n", .{can_fall});
-        while (can_fall) : (can_fall = cavern.canFall(rock)) {
-            if (should_print) print("{space}\n", .{rock});
-            rock.bottom -= 1;
-            switch (gas.tick()) {
-                .Left => cavern.shiftRockLeft(&rock),
-                .Right => cavern.shiftRockRight(&rock),
-            }
-            if (should_print) print("CF = {}\n", .{can_fall});
-            if (should_print) print("{s}\n", .{@tagName(gas.direction)});
-            if (should_print) print("{space}\n", .{rock});
-        }
-        cavern.solidifyIntoFloor(rock);
-        if (should_print) print("{}", .{cavern});
-    }
+    var cavern_2 = Cavern.init(allocator);
+    defer cavern_2.deinit();
 
+    var root_progress = std.Progress{};
+    var p1_node = root_progress.start("Part 1 rocks", ROCK_LIMIT);
+
+    var part_1 = cavern.simulate(ROCK_LIMIT, trimmed, p1_node);
+    p1_node.end();
+
+    // var p2_node = root_progress.start("Part 2 rocks", ROCK_LIMIT_2);
+    // var part_2: usize = cavern_2.simulate(ROCK_LIMIT_2, trimmed, p2_node);
+    // p2_node.end();
     var part_2: usize = 0;
-    return Answer{ .part_1 = cavern.floors.items.len - 1, .part_2 = part_2 };
+
+    return Answer{ .part_1 = part_1, .part_2 = part_2 };
 }
 
 pub fn main() !void {
