@@ -152,7 +152,7 @@ const Cavern = struct {
     }
 
     fn spawnRock(self: *Cavern) Rock {
-        return self.spawner.spawnRock(self.floors.items.len);
+        return self.spawner.spawnRock(self.floors.items.len + APPEARANCE_OFFSET_HEIGHT);
     }
 
     fn getFloorAt(self: Cavern, floor_height: usize) FloorBits {
@@ -351,6 +351,57 @@ const Cavern = struct {
 
         return self.floors.items.len - 1;
     }
+
+    fn simulateSmart(self: *Cavern, rock_limit: usize, gas_pattern: str, node: *std.Progress.Node) usize {
+        var gas = GasState.init(gas_pattern);
+
+        var rock: Rock = self.spawnRock();
+
+        var rock_count: usize = 0;
+        var tick_count: usize = 0;
+
+        var lcm_period = 5 * gas.content.len;
+        var last_period_height: usize = 0;
+        var last_period_height_delta: usize = 0;
+        var last_period_rocks: usize = 0;
+        var last_period_rocks_delta: usize = 0;
+        var offset: usize = 0;
+
+        while (rock_count <= rock_limit) : (tick_count += 1) {
+            switch (gas.tick()) {
+                .Left => self.shiftRockLeft(&rock),
+                .Right => self.shiftRockRight(&rock),
+            }
+            if (self.canFall(rock)) {
+                rock.bottom -= 1;
+            } else {
+                self.solidifyIntoFloor(rock);
+                rock_count += 1;
+                rock = self.spawnRock();
+                node.completeOne();
+            }
+            if (@rem(tick_count, lcm_period) == 0) {
+                const current_delta = self.floors.items.len - last_period_height;
+                const current_rocks_delta = rock_count - last_period_rocks;
+                // print("\nLCM :>\nDelta {d} vs {d}\nRocks  {d} vs {d}\n", .{ current_delta, last_period_height_delta, current_rocks_delta, last_period_rocks_delta });
+                // Are they the same?
+                if (current_delta == last_period_height_delta and current_rocks_delta == last_period_rocks_delta) {
+                    // Use rocks per period to figure out how many more periods would be needed
+                    const rocks_remainining: usize = rock_limit - rock_count;
+                    const periods_floor: usize = rocks_remainining / current_rocks_delta;
+                    // Fast-forward to the last few rocks
+                    rock_count += current_rocks_delta * periods_floor;
+                    offset = current_delta * periods_floor;
+                }
+                last_period_height_delta = current_delta;
+                last_period_rocks_delta = current_rocks_delta;
+                last_period_height = self.floors.items.len;
+                last_period_rocks = rock_count;
+            }
+        }
+
+        return self.floors.items.len + offset;
+    }
 };
 
 pub fn solve(filename: str, allocator: Allocator) !Answer {
@@ -366,14 +417,14 @@ pub fn solve(filename: str, allocator: Allocator) !Answer {
 
     var root_progress = std.Progress{};
     var p1_node = root_progress.start("Part 1 rocks", ROCK_LIMIT);
-
-    var part_1 = cavern.simulate(ROCK_LIMIT, trimmed, p1_node);
+    var part_1 = cavern.simulateSmart(ROCK_LIMIT, trimmed, p1_node);
     p1_node.end();
+    // var part_1: usize = 0;
 
-    // var p2_node = root_progress.start("Part 2 rocks", ROCK_LIMIT_2);
-    // var part_2: usize = cavern_2.simulate(ROCK_LIMIT_2, trimmed, p2_node);
-    // p2_node.end();
-    var part_2: usize = 0;
+    var p2_node = root_progress.start("Part 2 rocks", ROCK_LIMIT_2);
+    var part_2: usize = cavern_2.simulateSmart(ROCK_LIMIT_2, trimmed, p2_node);
+    p2_node.end();
+    // var part_2: usize = 0;
 
     return Answer{ .part_1 = part_1, .part_2 = part_2 };
 }
@@ -391,10 +442,16 @@ pub fn main() !void {
 
 test "day 17 worked examples" {
     var answer = try solve("day17.test", std.testing.allocator);
-    std.testing.expect(answer.part_1 == 3068) catch |err| {
+    var failed = false;
+    std.testing.expect(answer.part_1 == 3068) catch {
         print("{d} is not 3068\n", .{answer.part_1});
-        return err;
+        failed = true;
     };
+    std.testing.expect(answer.part_2 == 1514285714288) catch {
+        print("{d} is not 1514285714288\n", .{answer.part_2});
+        failed = true;
+    };
+    try std.testing.expect(!failed);
 }
 
 test "plus shifter bottom left" {
