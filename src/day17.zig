@@ -325,13 +325,11 @@ const Cavern = struct {
         var last_period_rocks: usize = 0;
         var last_period_rocks_delta: usize = 0;
         var offset: usize = 0;
-        var discount: usize = 0;
 
         print("SIM {d} ROCKS!\n", .{rock_limit});
 
-        while (rock_count <= rock_limit) : (tick_count += 1) {
+        while (rock_count < rock_limit) : (tick_count += 1) {
             if (tick_count > 0 and @rem(tick_count, lcm_period) == 0) {
-                discount += 1;
                 const current_delta = self.floors.items.len - last_period_height;
                 const current_rocks_delta = rock_count - last_period_rocks;
                 print("\nLCM :>\nDelta {d} vs {d}\nRocks  {d} vs {d}\n", .{ current_delta, last_period_height_delta, current_rocks_delta, last_period_rocks_delta });
@@ -366,7 +364,7 @@ const Cavern = struct {
             }
         }
 
-        return self.floors.items.len - discount + offset;
+        return self.floors.items.len - 1 + offset;
     }
 };
 
