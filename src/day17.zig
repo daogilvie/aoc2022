@@ -326,24 +326,18 @@ const Cavern = struct {
         var last_period_rocks_delta: usize = 0;
         var offset: usize = 0;
 
-        print("SIM {d} ROCKS!\n", .{rock_limit});
-
         while (rock_count < rock_limit) : (tick_count += 1) {
             if (tick_count > 0 and @rem(tick_count, lcm_period) == 0) {
                 const current_delta = self.floors.items.len - last_period_height;
                 const current_rocks_delta = rock_count - last_period_rocks;
-                print("\nLCM :>\nDelta {d} vs {d}\nRocks  {d} vs {d}\n", .{ current_delta, last_period_height_delta, current_rocks_delta, last_period_rocks_delta });
                 // Are they the same?
                 if (current_delta == last_period_height_delta and current_rocks_delta == last_period_rocks_delta) {
                     // Use rocks per period to figure out how many more periods would be needed
                     const rocks_remainining: usize = rock_limit - rock_count;
-                    print("     Rock Count:{d}, remaining {d}\n", .{ rock_count, rocks_remainining });
                     const periods_floor: usize = rocks_remainining / current_rocks_delta;
-                    print("     Periods to go:{d}, current_height = {d}\n", .{ periods_floor, self.floors.items.len });
                     // Fast-forward to the last few rocks
                     rock_count += current_rocks_delta * periods_floor;
                     offset = current_delta * periods_floor;
-                    print("     Rocks now:{d}, offset= {d}\n", .{ rock_count, offset });
                 }
                 last_period_height_delta = current_delta;
                 last_period_rocks_delta = current_rocks_delta;
