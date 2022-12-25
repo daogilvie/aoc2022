@@ -311,47 +311,6 @@ const Cavern = struct {
         }
     }
 
-    fn simulate(self: *Cavern, rock_limit: usize, gas_pattern: str, node: *std.Progress.Node) usize {
-        var gas = GasState.init(gas_pattern);
-
-        var rock: Rock = undefined;
-
-        var rock_count: usize = 0;
-        var should_print = false;
-
-        while (rock_count < rock_limit) : (rock_count += 1) {
-            // should_print = rock_count == ROCK_LIMIT - 1;
-            rock = self.spawnRock();
-            // Do the first 3 gas shifts now, as they are "free" so to speak
-            var i: usize = 0;
-            if (should_print) print("\n", .{});
-            while (i <= APPEARANCE_OFFSET_HEIGHT) : (i += 1) {
-                if (should_print) print("SIMPLE BEFORE: {space}\n", .{rock});
-                rock.shiftSimple(gas.tick());
-                if (should_print) print("{s}\n", .{@tagName(gas.direction)});
-                if (should_print) print("SIMPLE AFTER: {space}\n", .{rock});
-            }
-            var can_fall = self.canFall(rock);
-            if (should_print) print("CF = {}\n", .{can_fall});
-            while (can_fall) : (can_fall = self.canFall(rock)) {
-                if (should_print) print("{space}\n", .{rock});
-                rock.bottom -= 1;
-                switch (gas.tick()) {
-                    .Left => self.shiftRockLeft(&rock),
-                    .Right => self.shiftRockRight(&rock),
-                }
-                if (should_print) print("CF = {}\n", .{can_fall});
-                if (should_print) print("{s}\n", .{@tagName(gas.direction)});
-                if (should_print) print("{space}\n", .{rock});
-            }
-            self.solidifyIntoFloor(rock);
-            if (should_print) print("{}", .{self});
-            node.completeOne();
-        }
-
-        return self.floors.items.len - 1;
-    }
-
     fn simulateSmart(self: *Cavern, rock_limit: usize, gas_pattern: str, node: *std.Progress.Node) usize {
         var gas = GasState.init(gas_pattern);
 
@@ -366,8 +325,33 @@ const Cavern = struct {
         var last_period_rocks: usize = 0;
         var last_period_rocks_delta: usize = 0;
         var offset: usize = 0;
+        var discount: usize = 0;
+
+        print("SIM {d} ROCKS!\n", .{rock_limit});
 
         while (rock_count <= rock_limit) : (tick_count += 1) {
+            if (tick_count > 0 and @rem(tick_count, lcm_period) == 0) {
+                discount += 1;
+                const current_delta = self.floors.items.len - last_period_height;
+                const current_rocks_delta = rock_count - last_period_rocks;
+                print("\nLCM :>\nDelta {d} vs {d}\nRocks  {d} vs {d}\n", .{ current_delta, last_period_height_delta, current_rocks_delta, last_period_rocks_delta });
+                // Are they the same?
+                if (current_delta == last_period_height_delta and current_rocks_delta == last_period_rocks_delta) {
+                    // Use rocks per period to figure out how many more periods would be needed
+                    const rocks_remainining: usize = rock_limit - rock_count;
+                    print("     Rock Count:{d}, remaining {d}\n", .{ rock_count, rocks_remainining });
+                    const periods_floor: usize = rocks_remainining / current_rocks_delta;
+                    print("     Periods to go:{d}, current_height = {d}\n", .{ periods_floor, self.floors.items.len });
+                    // Fast-forward to the last few rocks
+                    rock_count += current_rocks_delta * periods_floor;
+                    offset = current_delta * periods_floor;
+                    print("     Rocks now:{d}, offset= {d}\n", .{ rock_count, offset });
+                }
+                last_period_height_delta = current_delta;
+                last_period_rocks_delta = current_rocks_delta;
+                last_period_height = self.floors.items.len;
+                last_period_rocks = rock_count;
+            }
             switch (gas.tick()) {
                 .Left => self.shiftRockLeft(&rock),
                 .Right => self.shiftRockRight(&rock),
@@ -380,27 +364,9 @@ const Cavern = struct {
                 rock = self.spawnRock();
                 node.completeOne();
             }
-            if (@rem(tick_count, lcm_period) == 0) {
-                const current_delta = self.floors.items.len - last_period_height;
-                const current_rocks_delta = rock_count - last_period_rocks;
-                // print("\nLCM :>\nDelta {d} vs {d}\nRocks  {d} vs {d}\n", .{ current_delta, last_period_height_delta, current_rocks_delta, last_period_rocks_delta });
-                // Are they the same?
-                if (current_delta == last_period_height_delta and current_rocks_delta == last_period_rocks_delta) {
-                    // Use rocks per period to figure out how many more periods would be needed
-                    const rocks_remainining: usize = rock_limit - rock_count;
-                    const periods_floor: usize = rocks_remainining / current_rocks_delta;
-                    // Fast-forward to the last few rocks
-                    rock_count += current_rocks_delta * periods_floor;
-                    offset = current_delta * periods_floor;
-                }
-                last_period_height_delta = current_delta;
-                last_period_rocks_delta = current_rocks_delta;
-                last_period_height = self.floors.items.len;
-                last_period_rocks = rock_count;
-            }
         }
 
-        return self.floors.items.len + offset;
+        return self.floors.items.len - discount + offset;
     }
 };
 
@@ -419,12 +385,10 @@ pub fn solve(filename: str, allocator: Allocator) !Answer {
     var p1_node = root_progress.start("Part 1 rocks", ROCK_LIMIT);
     var part_1 = cavern.simulateSmart(ROCK_LIMIT, trimmed, p1_node);
     p1_node.end();
-    // var part_1: usize = 0;
 
     var p2_node = root_progress.start("Part 2 rocks", ROCK_LIMIT_2);
     var part_2: usize = cavern_2.simulateSmart(ROCK_LIMIT_2, trimmed, p2_node);
     p2_node.end();
-    // var part_2: usize = 0;
 
     return Answer{ .part_1 = part_1, .part_2 = part_2 };
 }
