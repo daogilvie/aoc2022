@@ -201,12 +201,10 @@ const PuzzleContext = struct {
     }
 
     fn lookup(self: PuzzleContext) ?usize {
-        // print("LOOKING UP {[0]d}@{[1]d}:{[2]b:0>[3]}\n", .{ self.current_location, self.ticks_spent, self.valve_states.mask, self.uv.len });
         return self.memos.get(MemoKey{ .tick = self.ticks_spent, .ind = self.current_location, .vstates = self.valve_states.mask });
     }
 
     fn memoize(self: *PuzzleContext, benefit: usize) void {
-        // print("MEMO-IZING {[0]d}@{[1]d}:{[2]b:0>[3]} as {[4]d}\n", .{ self.current_location, self.ticks_spent, self.valve_states.mask, self.uv.len, benefit });
         self.memos.put(MemoKey{ .tick = self.ticks_spent, .ind = self.current_location, .vstates = self.valve_states.mask }, benefit) catch unreachable;
     }
 };
@@ -219,14 +217,12 @@ fn memoisedExplore(ctx: *PuzzleContext) usize {
         return ctx.current_benefit;
     }
     if (ctx.lookup()) |v| {
-        // print("FOUND IT INNIT\n", .{});
         return ctx.current_benefit + v;
     }
 
     const c_time = ctx.ticks_spent;
     const c_loc = ctx.current_location;
     const c_ben = ctx.current_benefit;
-    // print("{[1]s: >[0]} ARRIVED AT {[2]d}\n", .{ ctx.ticks_spent, " ", c_loc });
 
     var local_max: usize = ctx.current_benefit;
     for (local_valves) |next_valve| {
@@ -294,13 +290,9 @@ pub fn solve(filename: str, allocator: Allocator) !Answer {
         // Heuristics for a quick skip? I'm assuming the partitions where only <= 1/3rd  of
         // valves are in one side just won't cut it.
         if (valve_sets.count() <= size_cutoff or valve_sets.count() >= size_cutoff_upper) continue;
-        // print("BEFORE R1 {b:0>16} | {d} {d} {d}\n", .{ ctx.valve_states.mask, ctx.current_benefit, ctx.ticks_spent, ctx.current_location });
         const route_1 = memoisedExplore(&ctx);
-        // print("AFTER R1 {b:0>16} | {d} {d} {d} = {d}\n", .{ ctx.valve_states.mask, ctx.current_benefit, ctx.ticks_spent, ctx.current_location, route_1 });
         ctx.toggleAllValveStates();
-        // print("BEFORE R2 {b:0>16} | {d} {d} {d}\n", .{ ctx.valve_states.mask, ctx.current_benefit, ctx.ticks_spent, ctx.current_location });
         const route_2 = memoisedExplore(&ctx);
-        // print("AFTER R2 {b:0>16} | {d} {d} {d} = {d} \n", .{ ctx.valve_states.mask, ctx.current_benefit, ctx.ticks_spent, ctx.current_location, route_2 });
         part_2 = std.math.max(part_2, route_1 + route_2);
     }
 
