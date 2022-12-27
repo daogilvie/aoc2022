@@ -173,6 +173,12 @@ const PuzzleContext = struct {
         return self.distances[from_i][to_i];
     }
 
+    fn getExpectedBenefit(self: PuzzleContext, valve_index: usize) usize {
+        const distance = self.getDistanceInd(self.current_location, valve_index);
+        const time_consumed = 1 + self.ticks_spent + distance;
+        return if (self.max_ticks < time_consumed) 0 else (self.max_ticks - time_consumed) * self.uv[valve_index].flow_rate;
+    }
+
     fn getRemainingValves(self: PuzzleContext) []usize {
         const len = self.uv.len - self.valve_states.count();
         var valves = self.allocator.alloc(usize, len) catch unreachable;
@@ -239,15 +245,11 @@ fn memoisedExplore(ctx: *PuzzleContext) usize {
     var local_max: usize = ctx.current_benefit;
     for (local_valves) |next_valve| {
         // Prune any that would be pointless
+        if (ctx.getExpectedBenefit(next_valve) == 0) continue;
         ctx.advanceToValve(next_valve);
-        if (ctx.current_benefit > c_ben) {
-            // print("{[1]s: >[0]} EXPLORING {[2]d} @ T={[3]d}\n", .{ ctx.ticks_spent, " ", next_valve, ctx.ticks_spent });
-            const exp = memoisedExplore(ctx);
-            // print("{[1]s: >[0]} {[2]d} -> {[3]d} YIELDED {[4]d}\n", .{ c_time, " ", c_loc, next_valve, exp });
-            local_max = std.math.max(local_max, exp);
-        } else {
-            print("{[1]s: >[0]} SKIPPING {[2]d} @ T={[3]d} (from {[4]d})\n", .{ ctx.ticks_spent, " ", next_valve, ctx.ticks_spent, c_time });
-        }
+        const exp = memoisedExplore(ctx);
+        local_max = std.math.max(local_max, exp);
+        // Reset back to current state
         ctx.toggleValveState(next_valve);
         ctx.ticks_spent = c_time;
         ctx.current_location = c_loc;
