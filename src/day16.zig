@@ -76,7 +76,7 @@ const PuzzleContext = struct {
     distances: [][]usize,
     allocator: Allocator,
     valves: []Valve,
-    uv: []Valve,
+    uv: []usize,
     start_valve: Valve,
     max_ticks: usize = 30,
     ticks_spent: usize = 0,
@@ -128,21 +128,24 @@ const PuzzleContext = struct {
             }
         }
 
-        const uv = useful_valves.toOwnedSlice() catch unreachable;
-
         // We now downselect the distance matrix to be only the useful valves
         // Plus the starting valve for the initial exploration.
-        var dist_u: [][]usize = allocator.alloc([]usize, uv.len + 1) catch unreachable;
+        var dist_u: [][]usize = allocator.alloc([]usize, useful_valves.items.len + 1) catch unreachable;
 
         for (dist_u) |*du_slice, uv_ind| {
-            du_slice.* = allocator.alloc(usize, uv.len + 1) catch unreachable;
-            const source_valve = if (uv_ind == uv.len) valves[start_ind] else uv[uv_ind];
+            du_slice.* = allocator.alloc(usize, useful_valves.items.len + 1) catch unreachable;
+            const source_valve = if (uv_ind == useful_valves.items.len) valves[start_ind] else useful_valves.items[uv_ind];
             const source_slice = dist[source_valve.ind];
             for (du_slice.*) |*entry, index| {
-                const dest_valve = if (index == uv.len) valves[start_ind] else uv[index];
+                const dest_valve = if (index == useful_valves.items.len) valves[start_ind] else useful_valves.items[index];
                 entry.* = source_slice[dest_valve.ind];
             }
         }
+        const uv = allocator.alloc(usize, useful_valves.items.len) catch unreachable;
+        for (useful_valves.items) |v, i| {
+            uv[i] = v.flow_rate;
+        }
+        useful_valves.deinit();
 
         for (dist) |d_slice| {
             allocator.free(d_slice);
@@ -176,7 +179,7 @@ const PuzzleContext = struct {
     fn getExpectedBenefit(self: PuzzleContext, valve_index: usize) usize {
         const distance = self.getDistanceInd(self.current_location, valve_index);
         const time_consumed = 1 + self.ticks_spent + distance;
-        return if (self.max_ticks < time_consumed) 0 else (self.max_ticks - time_consumed) * self.uv[valve_index].flow_rate;
+        return if (self.max_ticks < time_consumed) 0 else (self.max_ticks - time_consumed) * self.uv[valve_index];
     }
 
     fn getRemainingValves(self: PuzzleContext) []usize {
@@ -194,7 +197,7 @@ const PuzzleContext = struct {
 
     fn advanceToValve(self: *PuzzleContext, valve_index: usize) void {
         self.ticks_spent += 1 + self.getDistanceInd(self.current_location, valve_index);
-        self.current_benefit += if (self.ticks_spent < self.max_ticks) (self.max_ticks - self.ticks_spent) * self.uv[valve_index].flow_rate else 0;
+        self.current_benefit += if (self.ticks_spent < self.max_ticks) (self.max_ticks - self.ticks_spent) * self.uv[valve_index] else 0;
         self.toggleValveState(valve_index);
         self.current_location = valve_index;
     }
@@ -260,48 +263,24 @@ fn memoisedExplore(ctx: *PuzzleContext) usize {
 }
 
 const PartitionIter = struct {
-    source: []Valve,
-    bucket_parts: [][]Valve,
-    bucket_0: []Valve,
-    bucket_1: []Valve,
     current_partition: usize = 0,
     limit: usize,
-    allocator: Allocator,
 
-    pub fn init(valves: []Valve, allocator: Allocator) PartitionIter {
-        const limit = SHIFT_1 << @truncate(u6, valves.len - 1);
-        var buckets = allocator.alloc([]Valve, 2) catch unreachable;
-        var bucket_0 = allocator.alloc(Valve, valves.len - 1) catch unreachable;
-        var bucket_1 = allocator.alloc(Valve, valves.len - 1) catch unreachable;
-        return PartitionIter{ .source = valves, .limit = limit, .bucket_0 = bucket_0, .bucket_parts = buckets, .bucket_1 = bucket_1, .allocator = allocator };
+    pub fn init(count: usize) PartitionIter {
+        const limit = SHIFT_1 << @truncate(u6, count - 1);
+        return PartitionIter{
+            .limit = limit,
+        };
     }
 
-    pub fn next(self: *PartitionIter) ?[][]Valve {
+    pub fn next(self: *PartitionIter) ?VBits {
         self.current_partition += 1;
         if (self.current_partition > self.limit) {
-            self.allocator.free(self.bucket_parts);
-            self.allocator.free(self.bucket_0);
-            self.allocator.free(self.bucket_1);
             return null;
         }
-        var ind: usize = 0;
-        var where_1_ind: usize = 0;
-        var where_0_ind: usize = 0;
-        var part = self.current_partition;
-        while (ind < self.source.len) : (ind += 1) {
-            const bit = (part >> @truncate(u6, ind)) & 1;
-            const v = self.source[ind];
-            if (bit == 1) {
-                self.bucket_1[where_1_ind] = v;
-                where_1_ind += 1;
-            } else {
-                self.bucket_0[where_0_ind] = v;
-                where_0_ind += 1;
-            }
-        }
-        self.bucket_parts[0] = self.bucket_0[0..where_0_ind];
-        self.bucket_parts[1] = self.bucket_1[0..where_1_ind];
-        return self.bucket_parts;
+        var bits = VBits.initEmpty();
+        bits.mask = @truncate(u16, self.current_partition);
+        return bits;
     }
 };
 
@@ -330,19 +309,15 @@ pub fn solve(filename: str, allocator: Allocator) !Answer {
     // Fill the dict
     _ = memoisedExplore(&ctx);
     var part_2: usize = 0;
-    var partitions = PartitionIter.init(ctx.uv, allocator);
+    var partitions = PartitionIter.init(ctx.uv.len);
     var size_cutoff: usize = @divTrunc(ctx.uv.len, 3);
-    var p_count: f64 = 0;
+    var size_cutoff_upper: usize = ctx.uv.len - size_cutoff;
     print("\n", .{});
     while (partitions.next()) |valve_sets| {
-        ctx.resetValveStates();
-        p_count += 1;
+        ctx.valve_states = valve_sets;
         // Heuristics for a quick skip? I'm assuming the partitions where only <= 1/3rd  of
         // valves are in one side just won't cut it.
-        if (valve_sets[0].len <= size_cutoff or valve_sets[1].len <= size_cutoff) continue;
-        for (valve_sets[0]) |v| {
-            ctx.toggleValveState(v.ind_u);
-        }
+        if (valve_sets.count() <= size_cutoff or valve_sets.count() >= size_cutoff_upper) continue;
         // print("BEFORE R1 {b:0>16} | {d} {d} {d}\n", .{ ctx.valve_states.mask, ctx.current_benefit, ctx.ticks_spent, ctx.current_location });
         const route_1 = memoisedExplore(&ctx);
         // print("AFTER R1 {b:0>16} | {d} {d} {d} = {d}\n", .{ ctx.valve_states.mask, ctx.current_benefit, ctx.ticks_spent, ctx.current_location, route_1 });
