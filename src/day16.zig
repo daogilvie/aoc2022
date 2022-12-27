@@ -65,6 +65,13 @@ fn parseValve(line: str, allocator: Allocator) Valve {
     return Valve{ .id = id, .flow_rate = flow_rate, .neighbours = neighbour_al.toOwnedSlice() catch unreachable, .allocator = allocator };
 }
 
+const VBits = std.bit_set.IntegerBitSet(16);
+const MemoKey = struct {
+    tick: usize,
+    ind: usize,
+    vstates: u16,
+};
+
 const PuzzleContext = struct {
     distances: [][]usize,
     allocator: Allocator,
@@ -72,7 +79,11 @@ const PuzzleContext = struct {
     uv: []Valve,
     start_valve: Valve,
     max_ticks: usize = 30,
-    flow_rates: []usize,
+    ticks_spent: usize = 0,
+    current_benefit: usize = 0,
+    valve_states: VBits,
+    current_location: usize,
+    memos: std.AutoHashMap(MemoKey, usize),
 
     fn init(valves: []Valve, allocator: Allocator) PuzzleContext {
         // Floyd Warshall approach
@@ -118,10 +129,6 @@ const PuzzleContext = struct {
         }
 
         const uv = useful_valves.toOwnedSlice() catch unreachable;
-        var flow_rates: []usize = allocator.alloc(usize, uv.len) catch unreachable;
-        for (uv) |v, ind| {
-            flow_rates[ind] = v.flow_rate;
-        }
 
         // We now downselect the distance matrix to be only the useful valves
         // Plus the starting valve for the initial exploration.
@@ -141,20 +148,21 @@ const PuzzleContext = struct {
             allocator.free(d_slice);
         }
         allocator.free(dist);
-        return PuzzleContext{ .valves = valves, .distances = dist_u, .start_valve = valves[start_ind], .allocator = allocator, .uv = uv, .flow_rates = flow_rates };
+        var memos = std.AutoHashMap(MemoKey, usize).init(allocator);
+        return PuzzleContext{ .valves = valves, .distances = dist_u, .start_valve = valves[start_ind], .allocator = allocator, .uv = uv, .valve_states = VBits.initEmpty(), .current_location = uv.len, .memos = memos };
     }
 
     fn deinit(self: *PuzzleContext) void {
         for (self.distances) |d_slice| {
             self.allocator.free(d_slice);
         }
-        self.allocator.free(self.flow_rates);
         self.allocator.free(self.distances);
         for (self.valves) |*v| {
             v.deinit();
         }
         self.allocator.free(self.valves);
         self.allocator.free(self.uv);
+        self.memos.deinit();
     }
 
     fn getDistance(self: PuzzleContext, from: Valve, to: Valve) usize {
@@ -164,71 +172,88 @@ const PuzzleContext = struct {
     fn getDistanceInd(self: PuzzleContext, from_i: usize, to_i: usize) usize {
         return self.distances[from_i][to_i];
     }
-};
 
-const PuzzleState = struct {
-    ctx: *const PuzzleContext,
-    location: Valve,
-    total_flow_benefit: usize = 0,
-    time_spent: usize = 0,
-    pub fn format(
-        self: PuzzleState,
-        comptime fmt: []const u8,
-        options: std.fmt.FormatOptions,
-        writer: anytype,
-    ) !void {
-        _ = fmt;
-        _ = options;
-
-        try writer.print("(time={d},flow_accum={d}", .{ self.time_spent, self.total_flow_benefit });
-        try writer.writeAll(")");
-    }
-
-    fn getExpectedBenefit(self: PuzzleState, valve: Valve) usize {
-        const distance = self.ctx.getDistance(self.location, valve);
-        const time_consumed = 1 + self.time_spent + distance;
-        return if (self.ctx.max_ticks < time_consumed) 0 else (self.ctx.max_ticks - time_consumed) * valve.flow_rate;
-    }
-
-    fn getDistance(self: PuzzleState, valve: Valve) usize {
-        return self.ctx.getDistance(self.location, valve);
-    }
-
-    fn advanceToValve(self: PuzzleState, valve: Valve) PuzzleState {
-        const new_time = self.time_spent + 1 + self.ctx.getDistance(self.location, valve);
-        const new_flow = if (new_time < self.ctx.max_ticks) self.total_flow_benefit + (self.ctx.max_ticks - new_time) * valve.flow_rate else self.total_flow_benefit;
-        return PuzzleState{ .ctx = self.ctx, .location = valve, .total_flow_benefit = new_flow, .time_spent = new_time };
-    }
-
-    fn getCutoffBenefit(self: PuzzleState) usize {
-        return if (self.time_spent > self.ctx.max_ticks) 0 else self.total_flow_benefit;
-    }
-};
-
-fn explore(current_state: PuzzleState, remaining: []Valve, ctx: *PuzzleContext) usize {
-    // Degenerate cases:
-    if (remaining.len == 1) {
-        // Advance
-        const new = current_state.advanceToValve(remaining[0]);
-        return new.total_flow_benefit;
-    }
-    var local_valves = ctx.*.allocator.alloc(Valve, remaining.len) catch unreachable;
-    std.mem.copy(Valve, local_valves, remaining);
-    defer ctx.*.allocator.free(local_valves);
-    var onward_valves = ctx.*.allocator.alloc(Valve, remaining.len - 1) catch unreachable;
-    defer ctx.*.allocator.free(onward_valves);
-    var local_max: usize = current_state.total_flow_benefit;
-    outer: for (local_valves) |next_valve, skip_ind| {
-        var onward_ind: usize = 0;
-        inner: for (local_valves) |v, ind| {
-            if (ind == skip_ind) continue :inner;
-            onward_valves[onward_ind] = v;
-            onward_ind += 1;
+    fn getRemainingValves(self: PuzzleContext) []usize {
+        const len = self.uv.len - self.valve_states.count();
+        var valves = self.allocator.alloc(usize, len) catch unreachable;
+        var i: usize = 0;
+        for (self.uv) |_, ind| {
+            if (!self.valve_states.isSet(ind)) {
+                valves[i] = ind;
+                i += 1;
+            }
         }
-        if (current_state.getExpectedBenefit(next_valve) == 0) continue :outer;
-        const onward_state = current_state.advanceToValve(next_valve);
-        local_max = std.math.max(local_max, explore(onward_state, onward_valves, ctx));
+        return valves;
     }
+
+    fn advanceToValve(self: *PuzzleContext, valve_index: usize) void {
+        self.ticks_spent += 1 + self.getDistanceInd(self.current_location, valve_index);
+        self.current_benefit += if (self.ticks_spent < self.max_ticks) (self.max_ticks - self.ticks_spent) * self.uv[valve_index].flow_rate else 0;
+        self.toggleValveState(valve_index);
+        self.current_location = valve_index;
+    }
+
+    fn toggleValveState(self: *PuzzleContext, valve_index: usize) void {
+        self.valve_states.toggle(valve_index);
+    }
+
+    fn toggleAllValveStates(self: *PuzzleContext) void {
+        self.valve_states.toggleAll();
+        // Now we want to unset the Most Significant N bits, where
+        // N is whatever the difference between uv.len and 16 is.
+        self.valve_states.setRangeValue(.{ .start = self.uv.len, .end = 16 }, false);
+    }
+
+    fn resetValveStates(self: *PuzzleContext) void {
+        self.valve_states = VBits.initEmpty();
+    }
+
+    fn lookup(self: PuzzleContext) ?usize {
+        // print("LOOKING UP {[0]d}@{[1]d}:{[2]b:0>[3]}\n", .{ self.current_location, self.ticks_spent, self.valve_states.mask, self.uv.len });
+        return self.memos.get(MemoKey{ .tick = self.ticks_spent, .ind = self.current_location, .vstates = self.valve_states.mask });
+    }
+
+    fn memoize(self: *PuzzleContext, benefit: usize) void {
+        // print("MEMO-IZING {[0]d}@{[1]d}:{[2]b:0>[3]} as {[4]d}\n", .{ self.current_location, self.ticks_spent, self.valve_states.mask, self.uv.len, benefit });
+        self.memos.put(MemoKey{ .tick = self.ticks_spent, .ind = self.current_location, .vstates = self.valve_states.mask }, benefit) catch unreachable;
+    }
+};
+
+fn memoisedExplore(ctx: *PuzzleContext) usize {
+    // identify remaining valves from context bitset
+    var local_valves = ctx.getRemainingValves();
+    defer ctx.allocator.free(local_valves);
+    if (local_valves.len == 0 or ctx.ticks_spent >= ctx.max_ticks) {
+        return ctx.current_benefit;
+    }
+    if (ctx.lookup()) |v| {
+        // print("FOUND IT INNIT\n", .{});
+        return ctx.current_benefit + v;
+    }
+
+    const c_time = ctx.ticks_spent;
+    const c_loc = ctx.current_location;
+    const c_ben = ctx.current_benefit;
+    // print("{[1]s: >[0]} ARRIVED AT {[2]d}\n", .{ ctx.ticks_spent, " ", c_loc });
+
+    var local_max: usize = ctx.current_benefit;
+    for (local_valves) |next_valve| {
+        // Prune any that would be pointless
+        ctx.advanceToValve(next_valve);
+        if (ctx.current_benefit > c_ben) {
+            // print("{[1]s: >[0]} EXPLORING {[2]d} @ T={[3]d}\n", .{ ctx.ticks_spent, " ", next_valve, ctx.ticks_spent });
+            const exp = memoisedExplore(ctx);
+            // print("{[1]s: >[0]} {[2]d} -> {[3]d} YIELDED {[4]d}\n", .{ c_time, " ", c_loc, next_valve, exp });
+            local_max = std.math.max(local_max, exp);
+        } else {
+            print("{[1]s: >[0]} SKIPPING {[2]d} @ T={[3]d} (from {[4]d})\n", .{ ctx.ticks_spent, " ", next_valve, ctx.ticks_spent, c_time });
+        }
+        ctx.toggleValveState(next_valve);
+        ctx.ticks_spent = c_time;
+        ctx.current_location = c_loc;
+        ctx.current_benefit = c_ben;
+    }
+    ctx.memoize(local_max - c_ben);
     return local_max;
 }
 
@@ -292,51 +317,38 @@ pub fn solve(filename: str, allocator: Allocator) !Answer {
     var ctx = PuzzleContext.init(valves, allocator);
     defer ctx.deinit();
 
-    const root_valve = for (ctx.valves) |v| {
-        if (std.mem.eql(u8, v.id, "AA")) break v;
-    } else unreachable;
-
-    const root_state = PuzzleState{ .ctx = &ctx, .location = root_valve, .total_flow_benefit = 0, .time_spent = 0 };
-
-    var path = ArrayList(PuzzleState).init(allocator);
-    defer path.deinit();
-
     print("\n", .{});
     const p1_start = std.time.milliTimestamp();
-    var part_1 = explore(root_state, ctx.uv, &ctx);
+    var part_1 = memoisedExplore(&ctx);
     print("P1 took: ~{d}ms\n", .{std.time.milliTimestamp() - p1_start});
 
     const p2_start = @intCast(usize, std.time.timestamp());
-    var avg: f64 = 0;
     ctx.max_ticks = 26;
+    ctx.memos.clearRetainingCapacity();
+    // Fill the dict
+    _ = memoisedExplore(&ctx);
     var part_2: usize = 0;
     var partitions = PartitionIter.init(ctx.uv, allocator);
-    var lim = @intToFloat(f64, partitions.limit);
-    var total_flow_available: usize = 0;
-    for (ctx.uv) |v| {
-        total_flow_available += v.flow_rate;
-    }
-    const flow_cutoff_low = total_flow_available / 4;
-    const flow_cutoff_high = total_flow_available - (total_flow_available / 4);
     var size_cutoff: usize = @divTrunc(ctx.uv.len, 3);
     var p_count: f64 = 0;
     print("\n", .{});
     while (partitions.next()) |valve_sets| {
+        ctx.resetValveStates();
         p_count += 1;
-        print("\r{d: >2} / {d}, Remaining ~= {d:.0} / {d:.0}s", .{ p_count, partitions.limit, avg * (lim - p_count), avg * lim });
-        if (@rem(p_count, 300) == 0) avg = @intToFloat(f64, @intCast(usize, std.time.timestamp()) - p2_start) / p_count;
         // Heuristics for a quick skip? I'm assuming the partitions where only <= 1/3rd  of
         // valves are in one side just won't cut it.
-        // I'm also going to assume that if the total available flow in one partition is much larger (i.e >100%) than
-        // the other that's also silly
         if (valve_sets[0].len <= size_cutoff or valve_sets[1].len <= size_cutoff) continue;
-        var tflow_0: usize = 0;
         for (valve_sets[0]) |v| {
-            tflow_0 += v.flow_rate;
+            ctx.toggleValveState(v.ind_u);
         }
-        if (tflow_0 >= flow_cutoff_high or tflow_0 <= flow_cutoff_low) continue;
-        const local_max = explore(root_state, valve_sets[0], &ctx) + explore(root_state, valve_sets[1], &ctx);
-        part_2 = std.math.max(part_2, local_max);
+        // print("BEFORE R1 {b:0>16} | {d} {d} {d}\n", .{ ctx.valve_states.mask, ctx.current_benefit, ctx.ticks_spent, ctx.current_location });
+        const route_1 = memoisedExplore(&ctx);
+        // print("AFTER R1 {b:0>16} | {d} {d} {d} = {d}\n", .{ ctx.valve_states.mask, ctx.current_benefit, ctx.ticks_spent, ctx.current_location, route_1 });
+        ctx.toggleAllValveStates();
+        // print("BEFORE R2 {b:0>16} | {d} {d} {d}\n", .{ ctx.valve_states.mask, ctx.current_benefit, ctx.ticks_spent, ctx.current_location });
+        const route_2 = memoisedExplore(&ctx);
+        // print("AFTER R2 {b:0>16} | {d} {d} {d} = {d} \n", .{ ctx.valve_states.mask, ctx.current_benefit, ctx.ticks_spent, ctx.current_location, route_2 });
+        part_2 = std.math.max(part_2, route_1 + route_2);
     }
     print("\nP2 took ~{d}s\n", .{@intCast(usize, std.time.timestamp()) - p2_start});
 
