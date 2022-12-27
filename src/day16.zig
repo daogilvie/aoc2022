@@ -19,19 +19,6 @@ const Valve = struct {
     fn deinit(self: *Valve) void {
         self.allocator.free(self.neighbours);
     }
-
-    pub fn format(
-        self: Valve,
-        comptime fmt: []const u8,
-        options: std.fmt.FormatOptions,
-        writer: anytype,
-    ) !void {
-        _ = fmt;
-        _ = options;
-
-        try writer.print("{s}({d}", .{ self.id, self.flow_rate });
-        try writer.writeAll(")");
-    }
 };
 
 const SHIFT_1: usize = 1;
@@ -213,10 +200,6 @@ const PuzzleContext = struct {
         self.valve_states.setRangeValue(.{ .start = self.uv.len, .end = 16 }, false);
     }
 
-    fn resetValveStates(self: *PuzzleContext) void {
-        self.valve_states = VBits.initEmpty();
-    }
-
     fn lookup(self: PuzzleContext) ?usize {
         // print("LOOKING UP {[0]d}@{[1]d}:{[2]b:0>[3]}\n", .{ self.current_location, self.ticks_spent, self.valve_states.mask, self.uv.len });
         return self.memos.get(MemoKey{ .tick = self.ticks_spent, .ind = self.current_location, .vstates = self.valve_states.mask });
@@ -298,21 +281,14 @@ pub fn solve(filename: str, allocator: Allocator) !Answer {
     var ctx = PuzzleContext.init(valves, allocator);
     defer ctx.deinit();
 
-    print("\n", .{});
-    const p1_start = std.time.milliTimestamp();
     var part_1 = memoisedExplore(&ctx);
-    print("P1 took: ~{d}ms\n", .{std.time.milliTimestamp() - p1_start});
 
-    const p2_start = @intCast(usize, std.time.timestamp());
     ctx.max_ticks = 26;
     ctx.memos.clearRetainingCapacity();
-    // Fill the dict
-    _ = memoisedExplore(&ctx);
     var part_2: usize = 0;
     var partitions = PartitionIter.init(ctx.uv.len);
     var size_cutoff: usize = @divTrunc(ctx.uv.len, 3);
     var size_cutoff_upper: usize = ctx.uv.len - size_cutoff;
-    print("\n", .{});
     while (partitions.next()) |valve_sets| {
         ctx.valve_states = valve_sets;
         // Heuristics for a quick skip? I'm assuming the partitions where only <= 1/3rd  of
@@ -327,7 +303,6 @@ pub fn solve(filename: str, allocator: Allocator) !Answer {
         // print("AFTER R2 {b:0>16} | {d} {d} {d} = {d} \n", .{ ctx.valve_states.mask, ctx.current_benefit, ctx.ticks_spent, ctx.current_location, route_2 });
         part_2 = std.math.max(part_2, route_1 + route_2);
     }
-    print("\nP2 took ~{d}s\n", .{@intCast(usize, std.time.timestamp()) - p2_start});
 
     return Answer{ .part_1 = part_1, .part_2 = part_2 };
 }
