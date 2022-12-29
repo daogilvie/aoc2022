@@ -53,9 +53,9 @@ fn parseValve(line: str, allocator: Allocator) Valve {
 }
 
 const VBits = std.bit_set.IntegerBitSet(16);
-const MemoKey = struct {
+const MemoKey = packed struct(u32) {
     tick: u8,
-    ind: usize,
+    ind: u8,
     vstates: u16,
 };
 
@@ -69,7 +69,7 @@ const PuzzleContext = struct {
     ticks_spent: u8 = 0,
     current_benefit: usize = 0,
     valve_states: VBits,
-    current_location: usize,
+    current_location: u8,
     memos: std.AutoHashMap(MemoKey, usize),
 
     fn init(valves: []Valve, allocator: Allocator) PuzzleContext {
@@ -139,7 +139,7 @@ const PuzzleContext = struct {
         }
         allocator.free(dist);
         var memos = std.AutoHashMap(MemoKey, usize).init(allocator);
-        return PuzzleContext{ .valves = valves, .distances = dist_u, .start_valve = valves[start_ind], .allocator = allocator, .uv = uv, .valve_states = VBits.initEmpty(), .current_location = uv.len, .memos = memos };
+        return PuzzleContext{ .valves = valves, .distances = dist_u, .start_valve = valves[start_ind], .allocator = allocator, .uv = uv, .valve_states = VBits.initEmpty(), .current_location = @truncate(u8, uv.len), .memos = memos };
     }
 
     fn deinit(self: *PuzzleContext) void {
@@ -169,20 +169,20 @@ const PuzzleContext = struct {
         return if (self.max_ticks < time_consumed) 0 else (self.max_ticks - time_consumed) * self.uv[valve_index];
     }
 
-    fn getRemainingValves(self: PuzzleContext) []usize {
+    fn getRemainingValves(self: PuzzleContext) []u8 {
         const len = self.uv.len - self.valve_states.count();
-        var valves = self.allocator.alloc(usize, len) catch unreachable;
+        var valves = self.allocator.alloc(u8, len) catch unreachable;
         var i: usize = 0;
         for (self.uv) |_, ind| {
             if (!self.valve_states.isSet(ind)) {
-                valves[i] = ind;
+                valves[i] = @truncate(u8, ind);
                 i += 1;
             }
         }
         return valves;
     }
 
-    fn advanceToValve(self: *PuzzleContext, valve_index: usize) void {
+    fn advanceToValve(self: *PuzzleContext, valve_index: u8) void {
         self.ticks_spent += 1 + self.getDistanceInd(self.current_location, valve_index);
         self.current_benefit += if (self.ticks_spent < self.max_ticks) (self.max_ticks - self.ticks_spent) * self.uv[valve_index] else 0;
         self.toggleValveState(valve_index);
