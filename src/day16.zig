@@ -287,8 +287,8 @@ pub fn solve(filename: str, allocator: Allocator) !Answer {
     var size_cutoff_upper: usize = ctx.uv.len - size_cutoff;
     while (partitions.next()) |valve_sets| {
         ctx.valve_states = valve_sets;
-        // Heuristics for a quick skip? I'm assuming the partitions where only <= 1/3rd  of
-        // valves are in one side just won't cut it.
+        // Heuristics for a quick skip? I'm assuming the partitions where
+        // only <= 1/3rd  of valves are in one side just won't cut it.
         if (valve_sets.count() <= size_cutoff or valve_sets.count() >= size_cutoff_upper) continue;
         const route_1 = memoisedExplore(&ctx);
         ctx.toggleAllValveStates();
