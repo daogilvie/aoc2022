@@ -223,8 +223,10 @@ fn memoisedExplore(ctx: *PuzzleContext) usize {
         // Prune any that would be pointless
         if (ctx.tooFar(next_valve)) continue;
         ctx.advanceToValve(next_valve);
-        const exp = memoisedExplore(ctx);
+
+        const exp = if (local_valves.len > 1) memoisedExplore(ctx) else ctx.current_benefit;
         local_max = std.math.max(local_max, exp);
+
         // Reset back to current state
         ctx.toggleValveState(next_valve);
         ctx.ticks_spent = c_time;
@@ -277,7 +279,6 @@ pub fn solve(filename: str, allocator: Allocator) !Answer {
 
     ctx.max_ticks = 26;
     ctx.memos.clearRetainingCapacity();
-
     const p2_start = std.time.milliTimestamp();
     var part_2: usize = 0;
     var partitions = PartitionIter.init(ctx.uv.len);
