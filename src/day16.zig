@@ -64,7 +64,6 @@ const PuzzleContext = struct {
     allocator: Allocator,
     valves: []Valve,
     uv: []usize,
-    start_valve: Valve,
     max_ticks: u8 = 30,
     ticks_spent: u8 = 0,
     current_benefit: usize = 0,
@@ -139,7 +138,7 @@ const PuzzleContext = struct {
         }
         allocator.free(dist);
         var memos = std.AutoHashMap(MemoKey, usize).init(allocator);
-        return PuzzleContext{ .valves = valves, .distances = dist_u, .start_valve = valves[start_ind], .allocator = allocator, .uv = uv, .valve_states = VBits.initEmpty(), .current_location = @truncate(u8, uv.len), .memos = memos };
+        return PuzzleContext{ .valves = valves, .distances = dist_u, .allocator = allocator, .uv = uv, .valve_states = VBits.initEmpty(), .current_location = @truncate(u8, uv.len), .memos = memos };
     }
 
     fn deinit(self: *PuzzleContext) void {
@@ -155,18 +154,16 @@ const PuzzleContext = struct {
         self.memos.deinit();
     }
 
-    fn getDistance(self: PuzzleContext, from: Valve, to: Valve) u8 {
-        return self.getDistanceInd(from.ind_u, to.ind_u);
-    }
-
     fn getDistanceInd(self: PuzzleContext, from_i: usize, to_i: usize) u8 {
         return self.distances[from_i][to_i];
     }
 
-    fn getExpectedBenefit(self: PuzzleContext, valve_index: usize) usize {
-        const distance = self.getDistanceInd(self.current_location, valve_index);
-        const time_consumed = 1 + self.ticks_spent + distance;
-        return if (self.max_ticks < time_consumed) 0 else (self.max_ticks - time_consumed) * self.uv[valve_index];
+    fn distanceTo(self: PuzzleContext, to_i: usize) u8 {
+        return self.getDistanceInd(self.current_location, to_i);
+    }
+
+    fn tooFar(self: PuzzleContext, valve_index: u8) bool {
+        return self.max_ticks < 1 + self.ticks_spent + self.distanceTo(valve_index);
     }
 
     fn getRemainingValves(self: PuzzleContext) []u8 {
@@ -184,7 +181,7 @@ const PuzzleContext = struct {
 
     fn advanceToValve(self: *PuzzleContext, valve_index: u8) void {
         self.ticks_spent += 1 + self.getDistanceInd(self.current_location, valve_index);
-        self.current_benefit += if (self.ticks_spent < self.max_ticks) (self.max_ticks - self.ticks_spent) * self.uv[valve_index] else 0;
+        self.current_benefit += (self.max_ticks - self.ticks_spent) * self.uv[valve_index];
         self.toggleValveState(valve_index);
         self.current_location = valve_index;
     }
@@ -211,14 +208,11 @@ const PuzzleContext = struct {
 
 fn memoisedExplore(ctx: *PuzzleContext) usize {
     // identify remaining valves from context bitset
-    var local_valves = ctx.getRemainingValves();
-    defer ctx.allocator.free(local_valves);
-    if (local_valves.len == 0 or ctx.ticks_spent >= ctx.max_ticks) {
-        return ctx.current_benefit;
-    }
     if (ctx.lookup()) |v| {
         return ctx.current_benefit + v;
     }
+    var local_valves = ctx.getRemainingValves();
+    defer ctx.allocator.free(local_valves);
 
     const c_time = ctx.ticks_spent;
     const c_loc = ctx.current_location;
@@ -227,7 +221,7 @@ fn memoisedExplore(ctx: *PuzzleContext) usize {
     var local_max: usize = ctx.current_benefit;
     for (local_valves) |next_valve| {
         // Prune any that would be pointless
-        if (ctx.getExpectedBenefit(next_valve) == 0) continue;
+        if (ctx.tooFar(next_valve)) continue;
         ctx.advanceToValve(next_valve);
         const exp = memoisedExplore(ctx);
         local_max = std.math.max(local_max, exp);
@@ -277,10 +271,16 @@ pub fn solve(filename: str, allocator: Allocator) !Answer {
     var ctx = PuzzleContext.init(valves, allocator);
     defer ctx.deinit();
 
+    const start = std.time.milliTimestamp();
+
     var part_1 = memoisedExplore(&ctx);
+
+    print("\nP1 ~ {d}ms\n", .{std.time.milliTimestamp() - start});
 
     ctx.max_ticks = 26;
     ctx.memos.clearRetainingCapacity();
+
+    const p2_start = std.time.milliTimestamp();
     var part_2: usize = 0;
     var partitions = PartitionIter.init(ctx.uv.len);
     var size_cutoff: usize = @divTrunc(ctx.uv.len, 3);
@@ -295,6 +295,7 @@ pub fn solve(filename: str, allocator: Allocator) !Answer {
         const route_2 = memoisedExplore(&ctx);
         part_2 = std.math.max(part_2, route_1 + route_2);
     }
+    print("\nP2 ~ {d}ms\n", .{std.time.milliTimestamp() - p2_start});
 
     return Answer{ .part_1 = part_1, .part_2 = part_2 };
 }
