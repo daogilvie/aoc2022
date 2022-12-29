@@ -54,19 +54,19 @@ fn parseValve(line: str, allocator: Allocator) Valve {
 
 const VBits = std.bit_set.IntegerBitSet(16);
 const MemoKey = struct {
-    tick: usize,
+    tick: u8,
     ind: usize,
     vstates: u16,
 };
 
 const PuzzleContext = struct {
-    distances: [][]usize,
+    distances: [][]u8,
     allocator: Allocator,
     valves: []Valve,
     uv: []usize,
     start_valve: Valve,
-    max_ticks: usize = 30,
-    ticks_spent: usize = 0,
+    max_ticks: u8 = 30,
+    ticks_spent: u8 = 0,
     current_benefit: usize = 0,
     valve_states: VBits,
     current_location: usize,
@@ -77,10 +77,10 @@ const PuzzleContext = struct {
         var useful_valves = ArrayList(Valve).init(allocator);
         var index_map = StringHashMap(usize).init(allocator);
         defer index_map.deinit();
-        var dist: [][]usize = allocator.alloc([]usize, valves.len) catch unreachable;
+        var dist: [][]u8 = allocator.alloc([]u8, valves.len) catch unreachable;
         for (dist) |*d_slice| {
-            d_slice.* = allocator.alloc(usize, valves.len) catch unreachable;
-            std.mem.set(usize, d_slice.*, valves.len);
+            d_slice.* = allocator.alloc(u8, valves.len) catch unreachable;
+            std.mem.set(u8, d_slice.*, @truncate(u8, valves.len));
         }
 
         var useful_ind: usize = 0;
@@ -117,10 +117,10 @@ const PuzzleContext = struct {
 
         // We now downselect the distance matrix to be only the useful valves
         // Plus the starting valve for the initial exploration.
-        var dist_u: [][]usize = allocator.alloc([]usize, useful_valves.items.len + 1) catch unreachable;
+        var dist_u: [][]u8 = allocator.alloc([]u8, useful_valves.items.len + 1) catch unreachable;
 
         for (dist_u) |*du_slice, uv_ind| {
-            du_slice.* = allocator.alloc(usize, useful_valves.items.len + 1) catch unreachable;
+            du_slice.* = allocator.alloc(u8, useful_valves.items.len + 1) catch unreachable;
             const source_valve = if (uv_ind == useful_valves.items.len) valves[start_ind] else useful_valves.items[uv_ind];
             const source_slice = dist[source_valve.ind];
             for (du_slice.*) |*entry, index| {
@@ -155,11 +155,11 @@ const PuzzleContext = struct {
         self.memos.deinit();
     }
 
-    fn getDistance(self: PuzzleContext, from: Valve, to: Valve) usize {
+    fn getDistance(self: PuzzleContext, from: Valve, to: Valve) u8 {
         return self.getDistanceInd(from.ind_u, to.ind_u);
     }
 
-    fn getDistanceInd(self: PuzzleContext, from_i: usize, to_i: usize) usize {
+    fn getDistanceInd(self: PuzzleContext, from_i: usize, to_i: usize) u8 {
         return self.distances[from_i][to_i];
     }
 
@@ -288,7 +288,8 @@ pub fn solve(filename: str, allocator: Allocator) !Answer {
     while (partitions.next()) |valve_sets| {
         ctx.valve_states = valve_sets;
         // Heuristics for a quick skip? I'm assuming the partitions where
-        // only <= 1/3rd  of valves are in one side just won't cut it.
+        // only <= 1/3rd  of
+        // valves are in one side just won't cut it.
         if (valve_sets.count() <= size_cutoff or valve_sets.count() >= size_cutoff_upper) continue;
         const route_1 = memoisedExplore(&ctx);
         ctx.toggleAllValveStates();
