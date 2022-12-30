@@ -19,6 +19,7 @@ const day_structs = .{
     @import("day15.zig"),
     @import("day16.zig"),
     @import("day17.zig"),
+    @import("day18.zig"),
 };
 
 pub const days = daygen: {
