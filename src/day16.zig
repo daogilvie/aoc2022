@@ -271,15 +271,10 @@ pub fn solve(filename: str, allocator: Allocator) !Answer {
     var ctx = PuzzleContext.init(valves, allocator);
     defer ctx.deinit();
 
-    const start = std.time.milliTimestamp();
-
     var part_1 = memoisedExplore(&ctx);
-
-    print("\nP1 ~ {d}ms\n", .{std.time.milliTimestamp() - start});
 
     ctx.max_ticks = 26;
     ctx.memos.clearRetainingCapacity();
-    const p2_start = std.time.milliTimestamp();
     var part_2: usize = 0;
     var partitions = PartitionIter.init(ctx.uv.len);
     var size_cutoff: usize = @divTrunc(ctx.uv.len, 3);
@@ -294,7 +289,6 @@ pub fn solve(filename: str, allocator: Allocator) !Answer {
         const route_2 = memoisedExplore(&ctx);
         part_2 = std.math.max(part_2, route_1 + route_2);
     }
-    print("\nP2 ~ {d}ms\n", .{std.time.milliTimestamp() - p2_start});
 
     return Answer{ .part_1 = part_1, .part_2 = part_2 };
 }

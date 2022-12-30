@@ -385,15 +385,19 @@ pub fn solve(filename: str, allocator: Allocator) !Answer {
     return Answer{ .part_1 = part_1, .part_2 = part_2 };
 }
 
+pub fn run(allocator: Allocator) void {
+    utils.printHeader("Day 17");
+    var answer = solve("day17.in", allocator) catch unreachable;
+    answer.print();
+}
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
     defer {
         _ = gpa.deinit();
     }
-    utils.printHeader("Day 17");
-    var answer = solve("day17.in", allocator) catch unreachable;
-    answer.print();
+    run(allocator);
 }
 
 test "day 17 worked examples" {
