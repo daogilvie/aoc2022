@@ -83,37 +83,6 @@ const FaceNeighbourhoodIterator = struct {
     }
 };
 
-fn canEscape(cube: *const Cube, extents: Cube, solid_cubes: *const CubeSet, current: *CubeSet, memo: *CubeFlagMap) bool {
-    // First: Check this cube in the memo
-    if (memo.get(cube.*)) |result| {
-        return result;
-    }
-    // Is this cube solid? In which case the answer is no.
-    if (solid_cubes.contains(cube.*)) return false;
-
-    // Does this cube have any extreme dimension? If so, it must be external
-    // by default.
-    if (cube.x == 0 or cube.x >= extents.x or cube.y == 0 or cube.y >= extents.y or cube.z == 0 or cube.z >= extents.z) return true;
-
-    // This cube is not solid, and has no known result, so we need to check
-    // each neighbour.
-    // Add ourselves to the current set
-    const c_nf = cube.cloneNoFace();
-    current.put(c_nf, {}) catch unreachable;
-    var f_it = FaceNeighbourhoodIterator{ .source = cube };
-    const is_external = while (f_it.next()) |*f| {
-        // Don't hop back and forth forever
-        if (current.contains(f.cloneNoFace())) continue;
-        const t = f.cloneNoFace();
-        if (canEscape(&t, extents, solid_cubes, current, memo)) break true;
-    } else false;
-
-    _ = current.remove(c_nf);
-    memo.put(cube.*, is_external) catch unreachable;
-
-    return is_external;
-}
-
 fn floodFillOutside(cube: *const Cube, extents: Cube, solid_cubes: *const CubeSet, current: *CubeSet) usize {
     var impact_counter: usize = 0;
     var local_impacts: usize = 0;
@@ -186,15 +155,18 @@ pub fn solve(filename: str, allocator: Allocator) !Answer {
     var under_consideration = CubeSet.init(allocator);
     defer under_consideration.deinit();
 
-    // var candidate_cube = while (cube_it.next()) |c| {
-    //     const t = c.cloneNoFace();
-    //     const can_escape = canEscape(&t, extents, &open_cube_set, &under_consideration, &escape_memo);
-    //     if (can_escape) break t;
-    // } else unreachable;
     const candidate_cube = Cube{ .x = 0, .y = 0, .z = 0, .facing = 0 };
 
-    print("\n", .{});
     part_2 += floodFillOutside(&candidate_cube, extents, &open_cube_set, &under_consideration);
+
+    // We will have to count any face on a 0-extreme separately, as the flood
+    // fill won't reach them
+    cube_it = open_cube_set.keyIterator();
+    while (cube_it.next()) |c| {
+        if (c.x == 0) part_2 += 1;
+        if (c.y == 0) part_2 += 1;
+        if (c.z == 0) part_2 += 1;
+    }
 
     return Answer{ .part_1 = part_1, .part_2 = part_2 };
 }
