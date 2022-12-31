@@ -109,10 +109,30 @@ fn canEscape(cube: *const Cube, extents: Cube, solid_cubes: *const CubeSet, curr
     } else false;
 
     _ = current.remove(c_nf);
-
     memo.put(cube.*, is_external) catch unreachable;
 
     return is_external;
+}
+
+fn floodFillOutside(cube: *const Cube, extents: Cube, solid_cubes: *const CubeSet, current: *CubeSet) usize {
+    var impact_counter: usize = 0;
+    var local_impacts: usize = 0;
+    current.put(cube.*, {}) catch unreachable;
+    var f_it = FaceNeighbourhoodIterator{ .source = cube };
+    while (f_it.next()) |*f| {
+        const t = f.cloneNoFace();
+        if (current.contains(t)) {
+            continue;
+        }
+        if (solid_cubes.contains(t)) {
+            local_impacts += 1;
+        } else if (f.x <= extents.x + 1 and f.y <= extents.y + 1 and f.z <= extents.z + 1) {
+            impact_counter += floodFillOutside(&t, extents, solid_cubes, current);
+        } else {
+            continue;
+        }
+    }
+    return impact_counter + local_impacts;
 }
 
 // Constants for logic
@@ -166,12 +186,15 @@ pub fn solve(filename: str, allocator: Allocator) !Answer {
     var under_consideration = CubeSet.init(allocator);
     defer under_consideration.deinit();
 
-    while (cube_it.next()) |c| {
-        part_2 += 1;
-        const t = c.cloneNoFace();
-        const can_escape = canEscape(&t, extents, &open_cube_set, &under_consideration, &escape_memo);
-        if (!can_escape) part_2 -= 1;
-    }
+    // var candidate_cube = while (cube_it.next()) |c| {
+    //     const t = c.cloneNoFace();
+    //     const can_escape = canEscape(&t, extents, &open_cube_set, &under_consideration, &escape_memo);
+    //     if (can_escape) break t;
+    // } else unreachable;
+    const candidate_cube = Cube{ .x = 0, .y = 0, .z = 0, .facing = 0 };
+
+    print("\n", .{});
+    part_2 += floodFillOutside(&candidate_cube, extents, &open_cube_set, &under_consideration);
 
     return Answer{ .part_1 = part_1, .part_2 = part_2 };
 }
